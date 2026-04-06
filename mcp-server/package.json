@@ -7,7 +7,7 @@
   "scripts": {
     "start": "bun run server.ts",
     "dev": "bun --watch run server.ts --http",
-    "sync-docs": "rsync -a --delete --exclude='mcp-server' --exclude='.git' --exclude='raw.txt' ../ ./docs/"
+    "gen-og": "python3 gen-og-image.py"
   },
   "dependencies": {
     "itty-router": "^5.0.18"

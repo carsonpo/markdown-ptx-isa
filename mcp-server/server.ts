@@ -637,7 +637,7 @@ function renderIndex(): string {
   }).join("\n");
 
   const body = `
-    <header class="mb-12">
+    <header class="mb-10">
       <div class="text-[0.6rem] font-bold uppercase tracking-[0.2em] text-cyan-700 mb-3">NVIDIA / PTX ISA</div>
       <h1 class="text-[2.2rem] font-bold text-white tracking-tight leading-none mb-1">
         PTX ISA <span class="text-cyan-400">v9.2</span>
@@ -647,6 +647,127 @@ function renderIndex(): string {
         Community Markdown reference — ${ALL_DOCS.length} pages covering the full PTX instruction set including warp-level MMA, wgmma (Hopper), and TensorCore Gen5 tcgen05 (Blackwell).
       </p>
     </header>
+
+    <!-- MCP Quickstart -->
+    <section class="mb-12">
+      <div class="flex items-center gap-3 mb-4">
+        <h2 class="section-label">MCP Quickstart</h2>
+        <div class="flex-1 h-px bg-white/[0.05]"></div>
+      </div>
+      <p class="text-slate-500 text-sm mb-5 leading-relaxed max-w-xl">
+        Add the hosted MCP server to your AI client to let it query PTX ISA docs directly.
+      </p>
+
+      <!-- Tabs -->
+      <div x-data="{ tab: 'http' }" class="space-y-3">
+
+        <!-- Tab buttons -->
+        <div class="flex gap-1.5 mb-1">
+          <button onclick="showTab('http', this)" id="tab-btn-http"
+            class="tab-btn active px-3 py-1.5 text-[0.7rem] font-mono rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 transition-all">
+            HTTP (Claude Desktop)
+          </button>
+          <button onclick="showTab('stdio', this)" id="tab-btn-stdio"
+            class="tab-btn px-3 py-1.5 text-[0.7rem] font-mono rounded border border-white/[0.08] bg-white/[0.03] text-slate-500 hover:text-slate-300 hover:border-white/[0.15] transition-all">
+            stdio via mcp-remote (Claude Code)
+          </button>
+          <button onclick="showTab('local', this)" id="tab-btn-local"
+            class="tab-btn px-3 py-1.5 text-[0.7rem] font-mono rounded border border-white/[0.08] bg-white/[0.03] text-slate-500 hover:text-slate-300 hover:border-white/[0.15] transition-all">
+            Self-hosted
+          </button>
+        </div>
+
+        <!-- Tab panels -->
+        <div id="tab-http" class="tab-panel">
+          <p class="text-[0.72rem] text-slate-600 mb-2 font-mono">~/.claude/claude_desktop_config.json</p>
+          <div class="relative">
+            <button onclick="copyCode('code-http')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
+            <pre id="code-http" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.78rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">{
+  "mcpServers": {
+    "ptx-isa": {
+      "type": "http",
+      "url": "https://ptx.poole.ai/mcp"
+    }
+  }
+}</pre>
+          </div>
+        </div>
+
+        <div id="tab-stdio" class="tab-panel hidden">
+          <p class="text-[0.72rem] text-slate-600 mb-2 font-mono">~/.claude.json  (or claude mcp add)</p>
+          <div class="relative">
+            <button onclick="copyCode('code-stdio')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
+            <pre id="code-stdio" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.78rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">{
+  "mcpServers": {
+    "ptx-isa": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://ptx.poole.ai/mcp"]
+    }
+  }
+}</pre>
+          </div>
+        </div>
+
+        <div id="tab-local" class="tab-panel hidden">
+          <p class="text-[0.72rem] text-slate-600 mb-2 font-mono">Run locally with Bun, point your client at it</p>
+          <div class="relative">
+            <button onclick="copyCode('code-local')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
+            <pre id="code-local" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.78rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">cd mcp-server
+bun install &amp;&amp; bun run sync-docs
+bun run start   # http://localhost:3000
+
+# MCP config:
+{
+  "mcpServers": {
+    "ptx-isa": {
+      "command": "bun",
+      "args": ["run", "/path/to/mcp-server/server.ts"]
+    }
+  }
+}</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools reference -->
+      <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div class="doc-card rounded-lg p-3.5">
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">ptx_list</div>
+          <div class="text-slate-500 text-[0.72rem] leading-snug">List all pages, optionally filtered by keyword</div>
+        </div>
+        <div class="doc-card rounded-lg p-3.5">
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">ptx_read</div>
+          <div class="text-slate-500 text-[0.72rem] leading-snug">Read a page&apos;s full Markdown by slug</div>
+        </div>
+        <div class="doc-card rounded-lg p-3.5">
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">ptx_search</div>
+          <div class="text-slate-500 text-[0.72rem] leading-snug">Full-text search across all pages</div>
+        </div>
+      </div>
+    </section>
+
+    <script>
+      function showTab(name, btn) {
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.classList.remove('active', 'border-cyan-500/40', 'bg-cyan-500/10', 'text-cyan-300');
+          b.classList.add('border-white/[0.08]', 'bg-white/[0.03]', 'text-slate-500');
+        });
+        document.getElementById('tab-' + name).classList.remove('hidden');
+        btn.classList.add('active', 'border-cyan-500/40', 'bg-cyan-500/10', 'text-cyan-300');
+        btn.classList.remove('border-white/[0.08]', 'bg-white/[0.03]', 'text-slate-500');
+      }
+      function copyCode(id) {
+        const text = document.getElementById(id).innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = event.target;
+          const orig = btn.innerText;
+          btn.innerText = 'copied!';
+          setTimeout(() => btn.innerText = orig, 1500);
+        });
+      }
+    </script>
+
     ${cards}
     <footer class="mt-16 pt-6 border-t border-white/[0.05] text-[0.65rem] text-slate-700 uppercase tracking-widest">
       Unofficial reformatting &mdash;
@@ -717,6 +838,30 @@ router.get("/api/search", (req) => {
   const max_results = parseInt(url.searchParams.get("max") ?? "20", 10);
   if (!query) return json({ error: "q parameter required" }, { status: 400 });
   return json(toolSearch({ query, max_results }));
+});
+
+// Static assets
+const STATIC_ROOT = import.meta.dir + "/static";
+router.get("/static/*", (req) => {
+  const rel = new URL(req.url).pathname.replace(/^\/static\//, "");
+  // basic path traversal guard
+  if (/(?:^|\/)\.\./.test(rel) || rel.includes("\x00")) return new Response("Invalid path", { status: 400 });
+  const absPath = `${STATIC_ROOT}/${rel}`;
+  try {
+    const file = Bun.file(absPath);
+    return new Response(file);
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
+});
+
+// og-image.png shortcut at root level
+router.get("/og-image.png", () => {
+  try {
+    return new Response(Bun.file(`${STATIC_ROOT}/og-image.png`));
+  } catch {
+    return new Response("Not found", { status: 404 });
+  }
 });
 
 // Raw markdown
