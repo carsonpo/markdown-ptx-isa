@@ -1,0 +1,42 @@
+# 9.7.16.4.1. Shared Memory Descriptor
+
+The shared memory descriptor describes the properties of multiplicand matrix in shared memory including its location in the shared memory of the current CTA. It is a 64-bit value contained in a register with the following layout:
+
+**Table 40** Shared memory descriptor layout
+
+| Bit-field | Size in bits | Description |
+|-----------|-------------|-------------|
+| 0–13      | 14          | matrix-descriptor-encode (Matrix start address) |
+| 14–15     | 2           | Reserved |
+| 16–29     | 14          | matrix-descriptor-encode (Leading dimension byte offset relative) OR matrix-descriptor-encode (Leading dimension byte address absolute) |
+| 30–31     | 2           | Reserved |
+| 32–45     | 14          | matrix-descriptor-encode (Stride dimension byte offset) |
+| 46–48     | 3           | Fixed constant value of 0b001 |
+| 49–51     | 3           | Matrix base offset |
+| 52        | 1           | Leading dimension stride mode: 0 = byte offset relative; 1 = byte address absolute |
+| 53–60     | 8           | Fixed constant value of 0xb00000000 |
+| 61–63     | 3           | Specifies the swizzling mode to be used: 0 = No swizzling; 1 = 128-Byte with 32B atomic swizzling; 2 = 128-Byte swizzling; 4 = 64-Byte swizzling; 6 = 32-Byte swizzling. Note: Values 3, 5 and 7 are invalid |
+
+where `matrix-descriptor-encode(x) = (x & 0x3FFFF) >> 4`
+
+The value of base offset is 0 when the repeating pattern of the specified swizzling mode starts as per shown in Table 41.
+
+**Table 41** Starting address of repeating pattern for various swizzling modes
+
+| Swizzling mode  | Starting address of the repeating pattern |
+|-----------------|------------------------------------------|
+| 128-Byte swizzle | 1024-Byte boundary |
+| 64-Byte swizzle  | 512-Byte boundary  |
+| 32-Byte swizzle  | 256-Byte boundary  |
+
+Otherwise, the base offset must be a non-zero value, computed using the following formula: `base offset = (pattern start addr >> 0x7) & 0x7`
+
+The following must be 16-byte aligned:
+
+- Matrix start address
+- Leading dimension byte offset
+- Stride dimension byte offset
+
+### 9.7.16.4.1.1. Target ISA Note
+
+The byte address mode for the leading dimension stride is supported on sm_103a.

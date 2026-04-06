@@ -8,7 +8,8 @@
     "start": "bun run index.ts",
     "web": "bun run web.ts",
     "dev:mcp": "bun --watch run index.ts --http",
-    "dev:web": "bun --watch run web.ts"
+    "dev:web": "bun --watch run web.ts",
+    "sync-docs": "rsync -a --delete --exclude='mcp-server' --exclude='.git' --exclude='raw.txt' ../ ./docs/"
   },
   "dependencies": {
     "itty-router": "^5.0.18"

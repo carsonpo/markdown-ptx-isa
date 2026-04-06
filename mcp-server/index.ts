@@ -17,7 +17,7 @@ import { AutoRouter, error, json } from "itty-router";
 // Constants
 // ---------------------------------------------------------------------------
 
-const DOCS_ROOT = import.meta.dir + "/..";
+const DOCS_ROOT = import.meta.dir + "/docs";
 const HTTP_PORT = 3000;
 
 // ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ function bunReadText(absPath: string): string {
   return readFileSync(absPath, "utf8");
 }
 
-const WALK_SKIP = new Set(["node_modules", ".git", "mcp-server"]);
+const WALK_SKIP = new Set(["node_modules", ".git"]);
 
 function bunWalk(dir: string): string[] {
   const results: string[] = [];

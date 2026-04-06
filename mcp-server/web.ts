@@ -15,7 +15,7 @@ import { readdirSync, statSync, readFileSync } from "node:fs";
 // Config
 // ---------------------------------------------------------------------------
 
-const DOCS_ROOT = import.meta.dir + "/..";
+const DOCS_ROOT = import.meta.dir + "/docs";
 const port = (() => {
   const i = process.argv.indexOf("--port");
   return i !== -1 ? parseInt(process.argv[i + 1], 10) : 4000;
@@ -29,7 +29,7 @@ function bunReadText(absPath: string): string {
   return readFileSync(absPath, "utf8");
 }
 
-const WALK_SKIP = new Set(["node_modules", ".git", "mcp-server"]);
+const WALK_SKIP = new Set(["node_modules", ".git"]);
 
 function bunWalk(dir: string): string[] {
   const out: string[] = [];
