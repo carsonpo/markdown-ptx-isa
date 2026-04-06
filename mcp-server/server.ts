@@ -874,10 +874,52 @@ router.get("/raw/*", (req) => {
   return new Response(result.content as string, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
 });
 
-// MCP over HTTP
+// MCP over HTTP — SSE transport (GET opens stream, POST sends a message)
+const mcpSessions = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+
+router.get("/mcp", (req) => {
+  const sessionId = crypto.randomUUID();
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      mcpSessions.set(sessionId, controller);
+      // Send the endpoint event so the client knows where to POST
+      const origin = new URL(req.url).origin;
+      controller.enqueue(encoder.encode(`event: endpoint\ndata: ${origin}/mcp?sessionId=${sessionId}\n\n`));
+    },
+    cancel() {
+      mcpSessions.delete(sessionId);
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+});
+
 router.post("/mcp", async (req) => {
+  const url = new URL(req.url);
+  const sessionId = url.searchParams.get("sessionId");
   const body = await req.json();
   const resp = handleMcpRequest(body);
+
+  // If a session is open, push the response over SSE
+  if (sessionId) {
+    const controller = mcpSessions.get(sessionId);
+    if (controller && resp) {
+      const encoder = new TextEncoder();
+      controller.enqueue(encoder.encode(`event: message\ndata: ${resp}\n\n`));
+    }
+    return new Response(null, { status: 202 });
+  }
+
+  // Fallback: stateless POST → direct JSON response (for simple HTTP clients)
   if (!resp) return new Response(null, { status: 204 });
   return json(JSON.parse(resp));
 });
