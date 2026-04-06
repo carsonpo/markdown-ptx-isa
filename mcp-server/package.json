@@ -1,0 +1,19 @@
+{
+  "name": "ptx-isa-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for NVIDIA PTX ISA v9.2 documentation",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts",
+    "web": "bun run web.ts",
+    "dev:mcp": "bun --watch run index.ts --http",
+    "dev:web": "bun --watch run web.ts"
+  },
+  "dependencies": {
+    "itty-router": "^5.0.18"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
