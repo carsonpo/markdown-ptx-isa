@@ -18,7 +18,7 @@ import { AutoRouter, error, json } from "itty-router";
 // ---------------------------------------------------------------------------
 
 const DOCS_ROOT = import.meta.dir + "/docs";
-const HTTP_PORT = 3000;
+const HTTP_PORT = parseInt(process.env.PORT ?? "3000", 10);
 
 // ---------------------------------------------------------------------------
 // Bun-native filesystem helpers (node:fs resolves to Bun's built-in compat layer)
@@ -84,6 +84,18 @@ function extractTitle(content: string, fallbackSlug?: string): { title: string; 
 
 const README_CONTENT = bunReadText(`${DOCS_ROOT}/README.md`);
 
+/** Reject any slug that would escape DOCS_ROOT via path traversal. */
+function safeSlug(raw: string): string | null {
+  // Strip leading slashes and .md suffix
+  const slug = raw.replace(/^\/+|\/+$/g, "").replace(/\.md$/, "");
+  // Reject anything containing .. segments or null bytes
+  if (/(?:^|\/)\.\.|[\x00]/.test(slug)) return null;
+  // Resolve and confirm it stays within DOCS_ROOT
+  const resolved = `${DOCS_ROOT}/${slug}.md`;
+  if (!resolved.startsWith(DOCS_ROOT + "/")) return null;
+  return slug;
+}
+
 const ALL_DOCS: DocEntry[] = bunWalk(DOCS_ROOT)
   .filter((p) => !p.endsWith("/README.md"))
   .map((absPath) => {
@@ -118,10 +130,11 @@ function toolList(args: { filter?: string }): object {
 
 function toolRead(args: { slug: string }): object {
   if (!args.slug) return { error: "slug is required" };
-  const slug = args.slug.replace(/^\/+|\/+$/g, "").replace(/\.md$/, "");
-  if (slug === "" || slug === "README" || slug === "overview") {
+  if (args.slug === "" || args.slug === "README" || args.slug === "overview") {
     return { slug: "README", title: "PTX ISA v9.2 Overview", content: README_CONTENT };
   }
+  const slug = safeSlug(args.slug);
+  if (!slug) return { error: "Invalid slug" };
   const entry = DOC_MAP.get(slug);
   if (!entry) {
     const candidate = ALL_DOCS.find(
@@ -429,7 +442,9 @@ function startHttpServer() {
   });
 
   router.get("/docs/*", (req) => {
-    const slug = new URL(req.url).pathname.replace(/^\/docs\//, "").replace(/\.md$/, "");
+    const raw = new URL(req.url).pathname.replace(/^\/docs\//, "");
+    const slug = safeSlug(raw);
+    if (!slug) return new Response("Invalid path", { status: 400 });
     const result = toolRead({ slug }) as Record<string, unknown>;
     if (result.error) return new Response(result.error as string, { status: 404 });
     return new Response(result.content as string, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
@@ -454,10 +469,14 @@ function startHttpServer() {
 
 startHttpServer();
 
-if (process.argv.includes("--http")) {
+// Use stdio MCP transport only when explicitly piping input (local MCP client use).
+// On Railway (or any hosted env), $PORT is set — skip stdio to avoid blocking.
+const httpOnly = process.argv.includes("--http") || !!process.env.PORT;
+
+if (httpOnly) {
   console.error("[ptx-isa-mcp] HTTP-only mode.");
 } else if (process.stdin.isTTY) {
-  console.error("[ptx-isa-mcp] stdin is a TTY — stdio MCP skipped. Pass input via pipe or use --http.");
+  console.error("[ptx-isa-mcp] stdin is a TTY — stdio MCP skipped. Pipe input or use --http.");
 } else {
   console.error("[ptx-isa-mcp] stdio MCP transport active.");
   startStdioTransport();

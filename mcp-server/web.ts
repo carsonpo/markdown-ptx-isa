@@ -18,7 +18,8 @@ import { readdirSync, statSync, readFileSync } from "node:fs";
 const DOCS_ROOT = import.meta.dir + "/docs";
 const port = (() => {
   const i = process.argv.indexOf("--port");
-  return i !== -1 ? parseInt(process.argv[i + 1], 10) : 4000;
+  if (i !== -1) return parseInt(process.argv[i + 1], 10);
+  return parseInt(process.env.PORT ?? "4000", 10);
 })();
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,14 @@ const port = (() => {
 
 function bunReadText(absPath: string): string {
   return readFileSync(absPath, "utf8");
+}
+
+function safeSlug(raw: string): string | null {
+  const slug = raw.replace(/^\/+|\/+$/g, "").replace(/\.md$/, "");
+  if (/(?:^|\/)\.\.|[\x00]/.test(slug)) return null;
+  const resolved = `${DOCS_ROOT}/${slug}.md`;
+  if (!resolved.startsWith(DOCS_ROOT + "/")) return null;
+  return slug;
 }
 
 const WALK_SKIP = new Set(["node_modules", ".git"]);
@@ -481,7 +490,9 @@ const router = AutoRouter();
 router.get("/", () => new Response(renderIndex(), { headers: { "Content-Type": "text/html; charset=utf-8" } }));
 
 router.get("/docs/*", (req) => {
-  const slug = new URL(req.url).pathname.replace(/^\/docs\//, "").replace(/\.md$/, "");
+  const raw = new URL(req.url).pathname.replace(/^\/docs\//, "");
+  const slug = safeSlug(raw);
+  if (!slug) return new Response("Invalid path", { status: 400 });
   return renderDoc(slug);
 });
 
