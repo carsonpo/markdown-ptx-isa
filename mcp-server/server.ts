@@ -1,14 +1,14 @@
 /**
- * PTX ISA v9.2 — Human-readable documentation browser
+ * PTX ISA v9.2 — Combined MCP + Documentation Server
  *
- * A clean, Tailwind-styled single-page app for browsing the PTX ISA docs.
- * Renders Markdown to HTML in-process. No build step, no extra npm deps.
+ * Serves the human-readable Tailwind documentation browser at /
+ * plus the MCP server (JSON-RPC 2.0 over stdio and POST /mcp),
+ * and a REST API at /api/*.
  *
- * Run:  bun run web.ts
- *       bun run web.ts --port 4000
+ * Run:  bun run server.ts
  */
 
-import { AutoRouter, error } from "itty-router";
+import { AutoRouter, error, json } from "itty-router";
 import { readdirSync, statSync, readFileSync } from "node:fs";
 
 // ---------------------------------------------------------------------------
@@ -16,14 +16,10 @@ import { readdirSync, statSync, readFileSync } from "node:fs";
 // ---------------------------------------------------------------------------
 
 const DOCS_ROOT = import.meta.dir + "/docs";
-const port = (() => {
-  const i = process.argv.indexOf("--port");
-  if (i !== -1) return parseInt(process.argv[i + 1], 10);
-  return parseInt(process.env.PORT ?? "4000", 10);
-})();
+const HTTP_PORT = parseInt(process.env.PORT ?? "3000", 10);
 
 // ---------------------------------------------------------------------------
-// Filesystem helpers (Bun's node:fs compat — no npm fs dep)
+// Filesystem helpers
 // ---------------------------------------------------------------------------
 
 function bunReadText(absPath: string): string {
@@ -65,10 +61,8 @@ interface DocEntry {
 }
 
 function extractTitle(src: string, fallbackSlug?: string): { title: string; section: string | null } {
-  // Match first heading of any level (H1 preferred, fall back to H2/H3)
   const m = src.match(/^#{1,3}\s+(.+)$/m);
   if (!m) {
-    // Derive from filename slug: strip leading digits/dashes, replace dashes with spaces, title-case
     if (fallbackSlug) {
       const name = fallbackSlug.split("/").pop() ?? fallbackSlug;
       const label = name.replace(/^\d+-/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
@@ -82,17 +76,240 @@ function extractTitle(src: string, fallbackSlug?: string): { title: string; sect
   return { title: raw, section: null };
 }
 
-const ALL_DOCS: DocEntry[] = bunWalk(DOCS_ROOT).map((abs) => {
-  const rel = abs.slice(DOCS_ROOT.length + 1).replace(/\\/g, "/");
-  const slug = rel.replace(/\.md$/, "");
-  const { title, section } = extractTitle(bunReadText(abs), slug);
-  return { path: rel, slug, title, section, crumbs: slug.split("/") };
-});
+const README_CONTENT = bunReadText(`${DOCS_ROOT}/README.md`);
+
+const ALL_DOCS: DocEntry[] = bunWalk(DOCS_ROOT)
+  .filter((p) => !p.endsWith("/README.md"))
+  .map((abs) => {
+    const rel = abs.slice(DOCS_ROOT.length + 1).replace(/\\/g, "/");
+    const slug = rel.replace(/\.md$/, "");
+    const { title, section } = extractTitle(bunReadText(abs), slug);
+    return { path: rel, slug, title, section, crumbs: slug.split("/") };
+  });
 
 const DOC_MAP = new Map<string, DocEntry>(ALL_DOCS.map((d) => [d.slug, d]));
 
 // ---------------------------------------------------------------------------
-// Lightweight Markdown → HTML renderer (zero deps)
+// MCP tool implementations
+// ---------------------------------------------------------------------------
+
+function toolList(args: { filter?: string }): object {
+  const filter = args.filter?.toLowerCase();
+  const docs = filter
+    ? ALL_DOCS.filter(
+        (d) =>
+          d.title.toLowerCase().includes(filter) ||
+          d.slug.toLowerCase().includes(filter) ||
+          (d.section ?? "").includes(filter)
+      )
+    : ALL_DOCS;
+  return {
+    total: docs.length,
+    documents: docs.map((d) => ({ slug: d.slug, title: d.title, section: d.section, path: d.path })),
+  };
+}
+
+function toolRead(args: { slug: string }): object {
+  if (!args.slug) return { error: "slug is required" };
+  if (args.slug === "" || args.slug === "README" || args.slug === "overview") {
+    return { slug: "README", title: "PTX ISA v9.2 Overview", content: README_CONTENT };
+  }
+  const slug = safeSlug(args.slug);
+  if (!slug) return { error: "Invalid slug" };
+  const entry = DOC_MAP.get(slug);
+  if (!entry) {
+    const candidate = ALL_DOCS.find(
+      (d) => d.slug.includes(slug) || d.title.toLowerCase().includes(slug.toLowerCase())
+    );
+    if (candidate) {
+      const content = bunReadText(`${DOCS_ROOT}/${candidate.path}`);
+      return { slug: candidate.slug, title: candidate.title, content, fuzzy_match: true };
+    }
+    return { error: `No document found for slug "${args.slug}"` };
+  }
+  const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
+  return { slug: entry.slug, title: entry.title, section: entry.section, content };
+}
+
+function toolSearch(args: { query: string; max_results?: number }): object {
+  if (!args.query) return { error: "query is required" };
+  const query = args.query.toLowerCase();
+  const maxResults = args.max_results ?? 20;
+  const results: Array<{ slug: string; title: string; matches: string[] }> = [];
+  for (const entry of ALL_DOCS) {
+    if (results.length >= maxResults) break;
+    const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
+    const matchingLines: string[] = [];
+    for (const line of content.split("\n")) {
+      if (line.toLowerCase().includes(query)) {
+        matchingLines.push(line.trim());
+        if (matchingLines.length >= 5) break;
+      }
+    }
+    if (matchingLines.length > 0) {
+      results.push({ slug: entry.slug, title: entry.title, matches: matchingLines });
+    }
+  }
+  return { query: args.query, total: results.length, results };
+}
+
+// ---------------------------------------------------------------------------
+// MCP tool definitions
+// ---------------------------------------------------------------------------
+
+const MCP_TOOLS = [
+  {
+    name: "ptx_list",
+    description:
+      "List all PTX ISA documentation pages. Optionally filter by keyword. " +
+      "Returns slug, title, section number, and file path for each page.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: { type: "string", description: "Optional keyword to filter documents by title or slug." },
+      },
+    },
+  },
+  {
+    name: "ptx_read",
+    description:
+      "Read the full Markdown content of a PTX ISA documentation page by its slug. " +
+      "Use ptx_list first to discover available slugs. " +
+      'Pass slug="README" or slug="overview" for the top-level overview.',
+    inputSchema: {
+      type: "object",
+      properties: {
+        slug: {
+          type: "string",
+          description: 'Document slug, e.g. "09-instruction-set/14-warp-level-mma/mma/ldmatrix".',
+        },
+      },
+      required: ["slug"],
+    },
+  },
+  {
+    name: "ptx_search",
+    description:
+      "Full-text search across all PTX ISA documentation pages. " +
+      "Returns matching documents with up to 5 snippet lines per document.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search keyword or phrase." },
+        max_results: { type: "number", description: "Maximum number of documents to return (default 20)." },
+      },
+      required: ["query"],
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------
+// JSON-RPC helpers
+// ---------------------------------------------------------------------------
+
+type JsonRpcId = string | number | null;
+
+const rpcResult = (id: JsonRpcId, result: unknown) =>
+  JSON.stringify({ jsonrpc: "2.0", id, result });
+
+const rpcError = (id: JsonRpcId, code: number, message: string) =>
+  JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } });
+
+// ---------------------------------------------------------------------------
+// MCP dispatcher
+// ---------------------------------------------------------------------------
+
+function handleMcpRequest(req: {
+  jsonrpc?: string;
+  id?: JsonRpcId;
+  method: string;
+  params?: Record<string, unknown>;
+}): string {
+  const id = req.id ?? null;
+  const params = req.params ?? {};
+
+  switch (req.method) {
+    case "initialize":
+      return rpcResult(id, {
+        protocolVersion: "2024-11-05",
+        serverInfo: { name: "ptx-isa-mcp", version: "1.0.0" },
+        capabilities: { tools: {}, resources: {} },
+      });
+
+    case "notifications/initialized":
+      return "";
+
+    case "ping":
+      return rpcResult(id, {});
+
+    case "tools/list":
+      return rpcResult(id, { tools: MCP_TOOLS });
+
+    case "tools/call": {
+      const toolName = params.name as string;
+      const args = (params.arguments ?? {}) as Record<string, unknown>;
+      let result: object;
+      switch (toolName) {
+        case "ptx_list":   result = toolList(args as { filter?: string }); break;
+        case "ptx_read":   result = toolRead(args as { slug: string }); break;
+        case "ptx_search": result = toolSearch(args as { query: string; max_results?: number }); break;
+        default: return rpcError(id, -32601, `Unknown tool: ${toolName}`);
+      }
+      return rpcResult(id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
+    }
+
+    case "resources/list":
+      return rpcResult(id, {
+        resources: ALL_DOCS.map((d) => ({
+          uri: `ptx://docs/${d.slug}`,
+          name: d.title,
+          description: d.section ? `Section ${d.section}` : undefined,
+          mimeType: "text/markdown",
+        })),
+      });
+
+    case "resources/read": {
+      const uri = params.uri as string;
+      const slug = uri.replace(/^ptx:\/\/docs\//, "");
+      const entry = DOC_MAP.get(slug);
+      if (!entry) return rpcError(id, -32602, `Unknown resource: ${uri}`);
+      const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
+      return rpcResult(id, { contents: [{ uri, mimeType: "text/markdown", text: content }] });
+    }
+
+    default:
+      return rpcError(id, -32601, `Method not found: ${req.method}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stdio transport
+// ---------------------------------------------------------------------------
+
+function startStdioTransport() {
+  const decoder = new TextDecoder();
+  let buf = "";
+
+  process.stdin.on("data", (chunk: Buffer) => {
+    buf += decoder.decode(chunk);
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: ReturnType<typeof JSON.parse>;
+      try { parsed = JSON.parse(trimmed); }
+      catch { process.stdout.write(rpcError(null, -32700, "Parse error") + "\n"); continue; }
+      const resp = handleMcpRequest(parsed);
+      if (resp) process.stdout.write(resp + "\n");
+    }
+  });
+
+  process.stdin.on("end", () => process.exit(0));
+}
+
+// ---------------------------------------------------------------------------
+// Web UI — Markdown renderer
 // ---------------------------------------------------------------------------
 
 function escHtml(s: string): string {
@@ -171,7 +388,6 @@ function mdToHtml(md: string): string {
   ];
 
   for (const line of lines) {
-    // Code fence
     if (line.startsWith("```")) {
       if (!inCode) { flushList(); flushTable(); flushBq(); inCode = true; codeLang = line.slice(3).trim(); }
       else flushCode();
@@ -179,14 +395,12 @@ function mdToHtml(md: string): string {
     }
     if (inCode) { codeLines.push(line); continue; }
 
-    // Blockquote
     if (line.startsWith("> ")) {
       flushList(); flushTable(); inBq = true; bqLines.push(line.slice(2)); continue;
     }
     if (inBq && line.trim() === "") { flushBq(); out.push(""); continue; }
     if (inBq) { bqLines.push(line.startsWith("> ") ? line.slice(2) : line); continue; }
 
-    // Table
     if (line.trim().startsWith("|") && line.includes("|")) {
       flushList();
       const cells = line.split("|").slice(1, -1);
@@ -196,7 +410,6 @@ function mdToHtml(md: string): string {
     }
     if (inTable && !line.trim().startsWith("|")) flushTable();
 
-    // Lists
     const ulm = line.match(/^(\s*)([-*+])\s+(.+)$/);
     const olm = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
     if (ulm) {
@@ -212,7 +425,6 @@ function mdToHtml(md: string): string {
     if (inList && line.trim() === "") { flushList(); out.push(""); continue; }
     if (inList) flushList();
 
-    // Heading
     const hm = line.match(/^(#{1,6})\s+(.+)$/);
     if (hm) {
       flushList(); flushTable(); flushBq();
@@ -223,17 +435,14 @@ function mdToHtml(md: string): string {
       continue;
     }
 
-    // HR
     if (/^---+$/.test(line.trim())) {
       flushList(); flushTable(); flushBq();
       out.push('<hr class="border-white/[0.06] my-8">');
       continue;
     }
 
-    // Empty line
     if (line.trim() === "") { flushList(); flushTable(); flushBq(); out.push(""); continue; }
 
-    // Paragraph
     out.push(`<p class="my-2 text-slate-400 leading-relaxed text-sm">${inlineHtml(line)}</p>`);
   }
 
@@ -248,15 +457,15 @@ function mdToHtml(md: string): string {
 interface NavGroup { label: string; items: DocEntry[]; }
 
 const NAV_GROUPS: NavGroup[] = [
-  { label: "Core Chapters",            items: ALL_DOCS.filter(d => !d.path.startsWith("09-instruction-set/") && d.path !== "README.md") },
+  { label: "Core Chapters",               items: ALL_DOCS.filter(d => !d.path.startsWith("09-instruction-set/") && d.path !== "README.md") },
   { label: "Chapter 9 — Instruction Set", items: ALL_DOCS.filter(d => d.path.startsWith("09-instruction-set/") && d.crumbs.length === 2) },
-  { label: "Warp-Level MMA  §9.7.14",  items: ALL_DOCS.filter(d => d.path.includes("14-warp-level-mma/")) },
-  { label: "wgmma  §9.7.15",           items: ALL_DOCS.filter(d => d.path.includes("15-wgmma/")) },
-  { label: "tcgen05  §9.7.16",         items: ALL_DOCS.filter(d => d.path.includes("16-tcgen05/")) },
+  { label: "Warp-Level MMA  §9.7.14",     items: ALL_DOCS.filter(d => d.path.includes("14-warp-level-mma/")) },
+  { label: "wgmma  §9.7.15",              items: ALL_DOCS.filter(d => d.path.includes("15-wgmma/")) },
+  { label: "tcgen05  §9.7.16",            items: ALL_DOCS.filter(d => d.path.includes("16-tcgen05/")) },
 ];
 
 // ---------------------------------------------------------------------------
-// HTML shell with Tailwind CDN
+// HTML shell
 // ---------------------------------------------------------------------------
 
 function shell(pageTitle: string, body: string, activeSlug = ""): string {
@@ -321,7 +530,6 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
     html { color-scheme: dark; }
     body { background: #070d1a; }
 
-    /* Animated gradient background */
     .bg-animated {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background: radial-gradient(ellipse 80% 60% at 20% 10%, rgba(14,57,100,0.55) 0%, transparent 60%),
@@ -337,20 +545,17 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
       100% { background-position: 25% 15%, 75% 85%, 55% 45%; }
     }
 
-    /* Sidebar */
     .sidebar {
       background: rgba(7, 13, 26, 0.85);
       border-right: 1px solid rgba(255,255,255,0.06);
       backdrop-filter: blur(12px);
     }
 
-    /* Scrollbars */
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(99,179,237,0.2); border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(99,179,237,0.4); }
 
-    /* Card hover glow */
     .doc-card {
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.06);
@@ -363,10 +568,8 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
       transform: translateY(-1px);
     }
 
-    /* Prose area */
     .prose-area { max-width: 820px; }
 
-    /* Section label style */
     .section-label {
       font-size: 0.6rem;
       font-weight: 700;
@@ -482,11 +685,12 @@ function renderDoc(slug: string): Response {
 }
 
 // ---------------------------------------------------------------------------
-// Router
+// HTTP server
 // ---------------------------------------------------------------------------
 
 const router = AutoRouter();
 
+// Web UI
 router.get("/", () => new Response(renderIndex(), { headers: { "Content-Type": "text/html; charset=utf-8" } }));
 
 router.get("/docs/*", (req) => {
@@ -496,12 +700,60 @@ router.get("/docs/*", (req) => {
   return renderDoc(slug);
 });
 
-router.all("*", () => error(404, "Page not found"));
+// REST API
+router.get("/api/list", (req) => {
+  const filter = new URL(req.url).searchParams.get("filter") ?? undefined;
+  return json(toolList({ filter }));
+});
+
+router.get("/api/read", (req) => {
+  const slug = new URL(req.url).searchParams.get("slug") ?? "";
+  return json(toolRead({ slug }));
+});
+
+router.get("/api/search", (req) => {
+  const url = new URL(req.url);
+  const query = url.searchParams.get("q") ?? "";
+  const max_results = parseInt(url.searchParams.get("max") ?? "20", 10);
+  if (!query) return json({ error: "q parameter required" }, { status: 400 });
+  return json(toolSearch({ query, max_results }));
+});
+
+// Raw markdown
+router.get("/raw/*", (req) => {
+  const raw = new URL(req.url).pathname.replace(/^\/raw\//, "");
+  const slug = safeSlug(raw);
+  if (!slug) return new Response("Invalid path", { status: 400 });
+  const result = toolRead({ slug }) as Record<string, unknown>;
+  if (result.error) return new Response(result.error as string, { status: 404 });
+  return new Response(result.content as string, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+});
+
+// MCP over HTTP
+router.post("/mcp", async (req) => {
+  const body = await req.json();
+  const resp = handleMcpRequest(body);
+  if (!resp) return new Response(null, { status: 204 });
+  return json(JSON.parse(resp));
+});
+
+router.all("*", () => error(404, "Not found"));
 
 // ---------------------------------------------------------------------------
-// Start
+// Entry point
 // ---------------------------------------------------------------------------
 
-Bun.serve({ port, fetch: router.fetch });
+Bun.serve({ port: HTTP_PORT, fetch: router.fetch });
+console.error(`[ptx-isa] http://localhost:${HTTP_PORT}`);
 
-console.log(`[ptx-isa-web] http://localhost:${port}`);
+// Stdio MCP transport — skip on Railway or when --http flag is passed
+const httpOnly = process.argv.includes("--http") || !!process.env.PORT;
+
+if (httpOnly) {
+  console.error("[ptx-isa] HTTP-only mode (stdio MCP disabled).");
+} else if (process.stdin.isTTY) {
+  console.error("[ptx-isa] stdin is a TTY — stdio MCP skipped. Pipe input or use --http.");
+} else {
+  console.error("[ptx-isa] stdio MCP transport active.");
+  startStdioTransport();
+}

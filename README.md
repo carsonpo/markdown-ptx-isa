@@ -2,14 +2,14 @@
 
 Community-maintained Markdown conversion of the [NVIDIA Parallel Thread Execution ISA v9.2](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html).
 
+**Hosted at [ptx.poole.ai](https://ptx.poole.ai)** with an MCP server at `/mcp` and a REST API at `/api`
+
 > **Disclaimer:** This is an unofficial reformatting for readability and tooling integration.
 > The authoritative source is always [NVIDIA's official documentation](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html).
 
 ---
 
 ## MCP Server & Documentation Browser
-
-**Hosted at [ptx.poole.ai](https://ptx.poole.ai)**
 
 | | URL |
 |---|---|
