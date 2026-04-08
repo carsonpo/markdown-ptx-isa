@@ -90,6 +90,64 @@ const ALL_DOCS: DocEntry[] = bunWalk(DOCS_ROOT)
 const DOC_MAP = new Map<string, DocEntry>(ALL_DOCS.map((d) => [d.slug, d]));
 
 // ---------------------------------------------------------------------------
+// Search index — built once at startup for fast queries
+// ---------------------------------------------------------------------------
+
+interface SearchDoc {
+  slug: string;
+  title: string;
+  section: string | null;
+  content: string;
+  lines: string[];           // original lines
+  linesLower: string[];      // lowercased for matching
+  tokens: Map<string, number>; // term → frequency
+  totalTokens: number;
+}
+
+function tokenize(text: string): string[] {
+  return text.toLowerCase().match(/[a-z0-9_.]+/g) ?? [];
+}
+
+const SEARCH_DOCS: SearchDoc[] = [];
+const IDF: Map<string, number> = new Map();
+
+// Build index at startup
+(function buildSearchIndex() {
+  const docFreq = new Map<string, number>();
+
+  for (const entry of ALL_DOCS) {
+    const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
+    const lines = content.split("\n");
+    const linesLower = lines.map(l => l.toLowerCase());
+    const words = tokenize(content);
+    const tokens = new Map<string, number>();
+    for (const w of words) {
+      tokens.set(w, (tokens.get(w) ?? 0) + 1);
+    }
+    // track which terms appear in which docs
+    for (const term of tokens.keys()) {
+      docFreq.set(term, (docFreq.get(term) ?? 0) + 1);
+    }
+    SEARCH_DOCS.push({
+      slug: entry.slug,
+      title: entry.title,
+      section: entry.section,
+      content,
+      lines,
+      linesLower,
+      tokens,
+      totalTokens: words.length,
+    });
+  }
+
+  // Compute IDF for all terms
+  const N = SEARCH_DOCS.length;
+  for (const [term, df] of docFreq) {
+    IDF.set(term, Math.log((N + 1) / (df + 1)) + 1);
+  }
+})();
+
+// ---------------------------------------------------------------------------
 // MCP tool implementations
 // ---------------------------------------------------------------------------
 
@@ -133,24 +191,101 @@ function toolRead(args: { slug: string }): object {
 
 function toolSearch(args: { query: string; max_results?: number }): object {
   if (!args.query) return { error: "query is required" };
-  const query = args.query.toLowerCase();
-  const maxResults = args.max_results ?? 20;
-  const results: Array<{ slug: string; title: string; matches: string[] }> = [];
-  for (const entry of ALL_DOCS) {
-    if (results.length >= maxResults) break;
-    const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
-    const matchingLines: string[] = [];
-    for (const line of content.split("\n")) {
-      if (line.toLowerCase().includes(query)) {
-        matchingLines.push(line.trim());
-        if (matchingLines.length >= 5) break;
+  const maxResults = Math.min(args.max_results ?? 20, 50);
+  const queryLower = args.query.toLowerCase();
+  const queryTerms = tokenize(args.query);
+
+  if (queryTerms.length === 0) return { error: "query contains no searchable terms" };
+
+  const scored: Array<{
+    slug: string;
+    title: string;
+    section: string | null;
+    score: number;
+    snippets: Array<{ line_number: number; text: string; }>;
+  }> = [];
+
+  for (const doc of SEARCH_DOCS) {
+    // Phase 1: Check if document has any relevance
+    const hasExactPhrase = doc.content.toLowerCase().includes(queryLower);
+    const matchingTerms = queryTerms.filter(t => doc.tokens.has(t));
+    if (matchingTerms.length === 0 && !hasExactPhrase) continue;
+
+    // Phase 2: Score the document (TF-IDF inspired)
+    let score = 0;
+
+    // Exact phrase match bonus (huge weight)
+    if (hasExactPhrase) score += 50;
+
+    // Title match bonus
+    const titleLower = doc.title.toLowerCase();
+    if (titleLower.includes(queryLower)) score += 100;
+    for (const t of queryTerms) {
+      if (titleLower.includes(t)) score += 20;
+    }
+
+    // Section number match
+    if (doc.section && queryLower.includes(doc.section)) score += 30;
+
+    // TF-IDF score for each query term
+    for (const t of matchingTerms) {
+      const tf = (doc.tokens.get(t) ?? 0) / doc.totalTokens;
+      const idf = IDF.get(t) ?? 1;
+      score += tf * idf * 10;
+    }
+
+    // Term coverage bonus — reward docs that match more query terms
+    score += (matchingTerms.length / queryTerms.length) * 15;
+
+    // Phase 3: Extract contextual snippets
+    const snippets: Array<{ line_number: number; text: string }> = [];
+    const usedLines = new Set<number>();
+    const CONTEXT = 1; // lines of context around match
+
+    for (let i = 0; i < doc.linesLower.length && snippets.length < 5; i++) {
+      const lineLower = doc.linesLower[i];
+      const lineHasMatch = lineLower.includes(queryLower) ||
+        queryTerms.some(t => lineLower.includes(t));
+
+      if (lineHasMatch && !usedLines.has(i)) {
+        // Gather context lines
+        const start = Math.max(0, i - CONTEXT);
+        const end = Math.min(doc.lines.length - 1, i + CONTEXT);
+        const contextLines: string[] = [];
+        for (let j = start; j <= end; j++) {
+          usedLines.add(j);
+          const trimmed = doc.lines[j].trim();
+          if (trimmed) contextLines.push(trimmed);
+        }
+        if (contextLines.length > 0) {
+          snippets.push({
+            line_number: i + 1,
+            text: contextLines.join("\n"),
+          });
+        }
       }
     }
-    if (matchingLines.length > 0) {
-      results.push({ slug: entry.slug, title: entry.title, matches: matchingLines });
+
+    if (snippets.length > 0 || score > 30) {
+      scored.push({ slug: doc.slug, title: doc.title, section: doc.section, score, snippets });
     }
   }
-  return { query: args.query, total: results.length, results };
+
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
+  const results = scored.slice(0, maxResults);
+
+  return {
+    query: args.query,
+    total: results.length,
+    results: results.map(r => ({
+      slug: r.slug,
+      title: r.title,
+      section: r.section,
+      relevance: Math.round(r.score * 100) / 100,
+      snippets: r.snippets,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -159,44 +294,64 @@ function toolSearch(args: { query: string; max_results?: number }): object {
 
 const MCP_TOOLS = [
   {
-    name: "ptx_list",
+    name: "list_pages",
     description:
-      "List all PTX ISA documentation pages. Optionally filter by keyword. " +
-      "Returns slug, title, section number, and file path for each page.",
+      "List all available PTX ISA v9.2 documentation pages. " +
+      "Returns an array of {slug, title, section, path} for every page. " +
+      "Use the optional filter parameter to narrow results by keyword matching against title, slug, or section number. " +
+      "Use this to discover slugs before calling read_page.",
     inputSchema: {
       type: "object",
       properties: {
-        filter: { type: "string", description: "Optional keyword to filter documents by title or slug." },
+        filter: {
+          type: "string",
+          description: "Optional keyword to filter by. Matches against page title, slug, and section number. " +
+            'Examples: "mma", "texture", "9.7.14", "floating-point".',
+        },
       },
     },
   },
   {
-    name: "ptx_read",
+    name: "read_page",
     description:
-      "Read the full Markdown content of a PTX ISA documentation page by its slug. " +
-      "Use ptx_list first to discover available slugs. " +
-      'Pass slug="README" or slug="overview" for the top-level overview.',
+      "Read the full Markdown content of a specific PTX ISA documentation page. " +
+      "Accepts a document slug (from list_pages or search results). " +
+      "Supports fuzzy matching — if the exact slug isn't found, the closest match is returned. " +
+      'Pass slug="overview" or slug="README" for the top-level ISA overview.',
     inputSchema: {
       type: "object",
       properties: {
         slug: {
           type: "string",
-          description: 'Document slug, e.g. "09-instruction-set/14-warp-level-mma/mma/ldmatrix".',
+          description: 'Document slug, e.g. "09-instruction-set/01-integer-arithmetic/add", ' +
+            '"04-syntax", "09-instruction-set/14-warp-level-mma/mma/ldmatrix". ' +
+            "Get valid slugs from list_pages or search.",
         },
       },
       required: ["slug"],
     },
   },
   {
-    name: "ptx_search",
+    name: "search",
     description:
-      "Full-text search across all PTX ISA documentation pages. " +
-      "Returns matching documents with up to 5 snippet lines per document.",
+      "Full-text search across all PTX ISA v9.2 documentation. " +
+      "Returns relevance-ranked results with contextual snippets (surrounding lines). " +
+      "Supports multi-word queries — results are scored by TF-IDF relevance, exact phrase matches, " +
+      "and title matches. Each result includes the page slug, title, relevance score, and up to 5 snippets " +
+      "with line numbers for precise referencing. " +
+      'Examples: "shared memory fence", "wgmma async", "ldmatrix", "tensor descriptor".',
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search keyword or phrase." },
-        max_results: { type: "number", description: "Maximum number of documents to return (default 20)." },
+        query: {
+          type: "string",
+          description: "Search query — can be a single keyword, multi-word phrase, instruction name, " +
+            'or concept. Examples: "atom.cas", "memory consistency", "tcgen05.st".',
+        },
+        max_results: {
+          type: "number",
+          description: "Maximum number of results to return (default 20, max 50).",
+        },
       },
       required: ["query"],
     },
@@ -232,7 +387,7 @@ function handleMcpRequest(req: {
     case "initialize":
       return rpcResult(id, {
         protocolVersion: "2024-11-05",
-        serverInfo: { name: "ptx-isa-mcp", version: "1.0.0" },
+        serverInfo: { name: "ptx-isa", version: "2.0.0" },
         capabilities: { tools: {}, resources: {} },
       });
 
@@ -250,9 +405,13 @@ function handleMcpRequest(req: {
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       let result: object;
       switch (toolName) {
-        case "ptx_list":   result = toolList(args as { filter?: string }); break;
-        case "ptx_read":   result = toolRead(args as { slug: string }); break;
-        case "ptx_search": result = toolSearch(args as { query: string; max_results?: number }); break;
+        case "list_pages":  result = toolList(args as { filter?: string }); break;
+        case "read_page":   result = toolRead(args as { slug: string }); break;
+        case "search":      result = toolSearch(args as { query: string; max_results?: number }); break;
+        // Legacy names for backwards compat
+        case "ptx_list":    result = toolList(args as { filter?: string }); break;
+        case "ptx_read":    result = toolRead(args as { slug: string }); break;
+        case "ptx_search":  result = toolSearch(args as { query: string; max_results?: number }); break;
         default: return rpcError(id, -32601, `Unknown tool: ${toolName}`);
       }
       return rpcResult(id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
@@ -577,6 +736,109 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
       text-transform: uppercase;
       color: rgba(148,163,184,0.5);
     }
+
+    /* Search modal */
+    .search-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+    }
+    .search-backdrop.active { opacity: 1; pointer-events: all; }
+
+    .search-modal {
+      position: fixed; z-index: 101;
+      top: 12vh; left: 50%; transform: translateX(-50%);
+      width: min(640px, 90vw);
+      max-height: 70vh;
+      background: #0a1220;
+      border: 1px solid rgba(99, 179, 237, 0.2);
+      border-radius: 12px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(99, 179, 237, 0.08);
+      display: flex; flex-direction: column;
+      opacity: 0; transform: translateX(-50%) scale(0.97);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      pointer-events: none;
+    }
+    .search-modal.active { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: all; }
+
+    .search-input-wrap {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .search-input-wrap svg { flex-shrink: 0; color: rgba(99,179,237,0.5); }
+    .search-input {
+      flex: 1; background: none; border: none; outline: none;
+      color: #e2e8f0; font-size: 0.95rem; font-family: inherit;
+    }
+    .search-input::placeholder { color: rgba(148,163,184,0.35); }
+    .search-kbd {
+      font-size: 0.6rem; color: rgba(148,163,184,0.4);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 4px; padding: 2px 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .search-results {
+      flex: 1; overflow-y: auto; padding: 6px;
+    }
+    .search-empty {
+      padding: 40px 20px; text-align: center;
+      color: rgba(148,163,184,0.35); font-size: 0.82rem;
+    }
+    .search-result-item {
+      display: block; padding: 10px 14px;
+      border-radius: 8px; cursor: pointer;
+      transition: background 0.1s ease;
+      text-decoration: none;
+      border: 1px solid transparent;
+    }
+    .search-result-item:hover, .search-result-item.selected {
+      background: rgba(99, 179, 237, 0.08);
+      border-color: rgba(99, 179, 237, 0.15);
+    }
+    .search-result-title {
+      font-size: 0.82rem; color: #e2e8f0; font-weight: 500;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .search-result-section {
+      font-size: 0.6rem; color: rgba(99,179,237,0.5);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .search-result-snippet {
+      font-size: 0.72rem; color: rgba(148,163,184,0.5);
+      margin-top: 4px; line-height: 1.5;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: pre-wrap;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .search-result-snippet mark {
+      background: rgba(99, 179, 237, 0.25);
+      color: #93c5fd;
+      border-radius: 2px;
+      padding: 0 1px;
+    }
+    .search-result-score {
+      font-size: 0.55rem; color: rgba(148,163,184,0.25);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .search-footer {
+      padding: 8px 16px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex; align-items: center; gap: 12px;
+      font-size: 0.6rem; color: rgba(148,163,184,0.3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .search-footer kbd {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 3px; padding: 1px 5px;
+    }
   </style>
 </head>
 <body class="h-full text-slate-300 antialiased">
@@ -594,6 +856,11 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
       </a>
     </div>
     <nav class="flex-1 overflow-y-auto py-4 px-3">
+      <button onclick="openSearch()" class="w-full flex items-center gap-2 px-3 pl-[12px] py-[7px] text-[0.75rem] text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border border-white/[0.06] hover:border-cyan-800/50 rounded-lg transition-all duration-150 mb-3 group">
+        <svg class="w-3 h-3 flex-shrink-0 opacity-40 group-hover:opacity-70 transition-opacity" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+        <span class="flex-1 text-left">Search docs...</span>
+        <kbd class="text-[0.55rem] text-slate-700 border border-white/[0.06] rounded px-1.5 py-px font-mono">\u2318F</kbd>
+      </button>
       <a href="/" class="flex items-center gap-2 px-3 pl-[12px] py-[5px] text-[0.75rem] text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border-l-2 border-transparent hover:border-cyan-700 transition-all duration-150 mb-4">
         <svg class="w-3 h-3 flex-shrink-0 opacity-50" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
         Overview
@@ -610,6 +877,173 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
   </main>
 
 </div>
+
+<!-- Search modal -->
+<div id="search-backdrop" class="search-backdrop" onclick="closeSearch()"></div>
+<div id="search-modal" class="search-modal">
+  <div class="search-input-wrap">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+    <input id="search-input" class="search-input" type="text" placeholder="Search PTX ISA docs..." autocomplete="off" spellcheck="false">
+    <span class="search-kbd">esc</span>
+  </div>
+  <div id="search-results" class="search-results">
+    <div class="search-empty">Type to search across all documentation</div>
+  </div>
+  <div class="search-footer">
+    <span><kbd>&uarr;</kbd> <kbd>&darr;</kbd> navigate</span>
+    <span><kbd>enter</kbd> open</span>
+    <span><kbd>esc</kbd> close</span>
+  </div>
+</div>
+
+<script>
+(function() {
+  const backdrop = document.getElementById('search-backdrop');
+  const modal = document.getElementById('search-modal');
+  const input = document.getElementById('search-input');
+  const resultsEl = document.getElementById('search-results');
+  let isOpen = false;
+  let debounceTimer = null;
+  let selectedIdx = -1;
+  let resultItems = [];
+
+  window.openSearch = function() {
+    if (isOpen) return;
+    isOpen = true;
+    backdrop.classList.add('active');
+    modal.classList.add('active');
+    input.value = '';
+    resultsEl.innerHTML = '<div class="search-empty">Type to search across all documentation</div>';
+    selectedIdx = -1;
+    resultItems = [];
+    requestAnimationFrame(() => input.focus());
+  };
+
+  window.closeSearch = function() {
+    if (!isOpen) return;
+    isOpen = false;
+    backdrop.classList.remove('active');
+    modal.classList.remove('active');
+    input.blur();
+  };
+
+  // Cmd/Ctrl+F override
+  document.addEventListener('keydown', function(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      openSearch();
+    }
+    if (e.key === 'Escape' && isOpen) {
+      e.preventDefault();
+      closeSearch();
+    }
+    if (!isOpen) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (resultItems.length > 0) {
+        selectedIdx = Math.min(selectedIdx + 1, resultItems.length - 1);
+        updateSelection();
+      }
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (resultItems.length > 0) {
+        selectedIdx = Math.max(selectedIdx - 1, 0);
+        updateSelection();
+      }
+    }
+    if (e.key === 'Enter' && isOpen) {
+      e.preventDefault();
+      if (selectedIdx >= 0 && selectedIdx < resultItems.length) {
+        resultItems[selectedIdx].click();
+      }
+    }
+  });
+
+  function updateSelection() {
+    resultItems.forEach((el, i) => {
+      el.classList.toggle('selected', i === selectedIdx);
+    });
+    if (selectedIdx >= 0 && resultItems[selectedIdx]) {
+      resultItems[selectedIdx].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function highlightText(text, query) {
+    if (!query) return escH(text);
+    const escaped = escH(text);
+    const qLower = query.toLowerCase();
+    const terms = qLower.split(/\\s+/).filter(Boolean);
+    let result = escaped;
+    // First try exact phrase
+    const idx = result.toLowerCase().indexOf(qLower);
+    if (idx !== -1 && query.includes(' ')) {
+      const before = result.slice(0, idx);
+      const match = result.slice(idx, idx + query.length);
+      const after = result.slice(idx + query.length);
+      return before + '<mark>' + match + '</mark>' + after;
+    }
+    // Then highlight individual terms
+    for (const term of terms) {
+      if (term.length < 2) continue;
+      const re = new RegExp('(' + term.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&') + ')', 'gi');
+      result = result.replace(re, '<mark>$1</mark>');
+    }
+    return result;
+  }
+
+  function escH(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  input.addEventListener('input', function() {
+    const q = input.value.trim();
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (!q) {
+      resultsEl.innerHTML = '<div class="search-empty">Type to search across all documentation</div>';
+      selectedIdx = -1;
+      resultItems = [];
+      return;
+    }
+    debounceTimer = setTimeout(() => doSearch(q), 150);
+  });
+
+  async function doSearch(q) {
+    try {
+      const resp = await fetch('/api/search?q=' + encodeURIComponent(q) + '&max=30');
+      const data = await resp.json();
+      if (input.value.trim() !== q) return; // stale
+      if (!data.results || data.results.length === 0) {
+        resultsEl.innerHTML = '<div class="search-empty">No results for &ldquo;' + escH(q) + '&rdquo;</div>';
+        selectedIdx = -1;
+        resultItems = [];
+        return;
+      }
+      let html = '';
+      for (const r of data.results) {
+        const sectionBadge = r.section
+          ? '<span class="search-result-section">&sect;' + escH(r.section) + '</span>'
+          : '';
+        const snippet = r.snippets && r.snippets.length > 0
+          ? '<div class="search-result-snippet">' + highlightText(r.snippets[0].text, q) + '</div>'
+          : '';
+        html += '<a href="/docs/' + escH(r.slug) + '" class="search-result-item" onclick="closeSearch()">'
+          + '<div class="search-result-title">' + highlightText(r.title, q) + sectionBadge + '</div>'
+          + snippet
+          + '</a>';
+      }
+      resultsEl.innerHTML = html;
+      resultItems = Array.from(resultsEl.querySelectorAll('.search-result-item'));
+      selectedIdx = 0;
+      updateSelection();
+    } catch(e) {
+      resultsEl.innerHTML = '<div class="search-empty">Search error</div>';
+    }
+  }
+})();
+</script>
+
 </body>
 </html>`;
 }
@@ -732,16 +1166,16 @@ bun run start   # http://localhost:3000
       <!-- Tools reference -->
       <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div class="doc-card rounded-lg p-3.5">
-          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">ptx_list</div>
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">list_pages</div>
           <div class="text-slate-500 text-[0.72rem] leading-snug">List all pages, optionally filtered by keyword</div>
         </div>
         <div class="doc-card rounded-lg p-3.5">
-          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">ptx_read</div>
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">read_page</div>
           <div class="text-slate-500 text-[0.72rem] leading-snug">Read a page&apos;s full Markdown by slug</div>
         </div>
         <div class="doc-card rounded-lg p-3.5">
-          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">ptx_search</div>
-          <div class="text-slate-500 text-[0.72rem] leading-snug">Full-text search across all pages</div>
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">search</div>
+          <div class="text-slate-500 text-[0.72rem] leading-snug">Relevance-ranked full-text search with contextual snippets</div>
         </div>
       </div>
     </section>
