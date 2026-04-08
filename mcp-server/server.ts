@@ -477,7 +477,7 @@ function escHtml(s: string): string {
 
 function inlineHtml(raw: string): string {
   let s = escHtml(raw);
-  s = s.replace(/`([^`]+)`/g, '<code class="bg-[#0d1a2d] text-cyan-300 border border-cyan-900/40 px-1.5 py-px rounded text-[0.85em] font-mono">$1</code>');
+  s = s.replace(/`([^`]+)`/g, '<code class="bg-[#0d1a2d] text-cyan-300 border border-cyan-900/40 px-1.5 py-px rounded text-[0.88em] font-mono">$1</code>');
   s = s.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
   s = s.replace(/\*(.+?)\*/g, "<em class=\"italic\">$1</em>");
@@ -499,21 +499,21 @@ function mdToHtml(md: string): string {
   function flushCode() {
     if (!inCode) return;
     const lang = codeLang ? `<span class="absolute top-2 right-3 text-[0.65rem] text-cyan-700 font-mono select-none uppercase tracking-widest">${escHtml(codeLang)}</span>` : "";
-    out.push(`<div class="relative my-5">${lang}<pre class="bg-[#060d1a] border border-cyan-900/30 rounded-lg p-5 overflow-x-auto text-[0.84rem] font-mono text-cyan-200 leading-relaxed shadow-[inset_0_1px_0_0_rgba(99,179,237,0.05)]"><code>${codeLines.map(escHtml).join("\n")}</code></pre></div>`);
+    out.push(`<div class="relative my-5">${lang}<pre class="bg-[#060d1a] border border-cyan-900/30 rounded-lg p-5 overflow-x-auto text-[0.9rem] font-mono text-cyan-200 leading-relaxed shadow-[inset_0_1px_0_0_rgba(99,179,237,0.05)]"><code>${codeLines.map(escHtml).join("\n")}</code></pre></div>`);
     inCode = false; codeLang = ""; codeLines = [];
   }
   function flushTable() {
     if (!inTable) return;
-    out.push('<div class="overflow-x-auto my-5 rounded-lg border border-white/[0.06]"><table class="w-full text-[0.84rem] border-collapse">');
+    out.push('<div class="overflow-x-auto my-5 rounded-lg border border-white/[0.06]"><table class="w-full text-[0.9rem] border-collapse">');
     if (tableHead) {
       out.push("<thead><tr>");
-      tableHead.forEach(c => out.push(`<th class="text-left px-4 py-2.5 bg-white/[0.04] text-[0.68rem] font-semibold uppercase tracking-widest text-slate-400 border-b border-white/[0.06]">${inlineHtml(c.trim())}</th>`));
+      tableHead.forEach(c => out.push(`<th class="text-left px-4 py-2.5 bg-white/[0.04] text-[0.78rem] font-semibold uppercase tracking-widest text-slate-400 border-b border-white/[0.06]">${inlineHtml(c.trim())}</th>`));
       out.push("</tr></thead>");
     }
     out.push("<tbody>");
     tableRows.forEach((row) => {
       out.push('<tr class="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">');
-      row.forEach(c => out.push(`<td class="px-4 py-2.5 text-slate-300 text-[0.84rem]">${inlineHtml(c.trim())}</td>`));
+      row.forEach(c => out.push(`<td class="px-4 py-2.5 text-slate-300 text-[0.9rem]">${inlineHtml(c.trim())}</td>`));
       out.push("</tr>");
     });
     out.push("</tbody></table></div>");
@@ -521,7 +521,7 @@ function mdToHtml(md: string): string {
   }
   function flushBq() {
     if (!inBq) return;
-    out.push('<blockquote class="border-l-[2px] border-cyan-500/30 pl-5 my-4 text-slate-400 italic text-sm space-y-1 bg-cyan-500/[0.03] py-3 rounded-r-lg">');
+    out.push('<blockquote class="border-l-[2px] border-cyan-500/30 pl-5 my-4 text-slate-400 italic text-[0.9rem] space-y-1 bg-cyan-500/[0.03] py-3 rounded-r-lg">');
     bqLines.forEach(l => out.push(`<p>${inlineHtml(l)}</p>`));
     out.push("</blockquote>");
     inBq = false; bqLines = [];
@@ -533,7 +533,7 @@ function mdToHtml(md: string): string {
       ? 'class="list-decimal list-outside ml-5 my-3 space-y-1 text-slate-300"'
       : 'class="list-disc list-outside ml-5 my-3 space-y-1.5 text-slate-300 marker:text-cyan-700"';
     out.push(`<${tag} ${cls}>`);
-    listItems.forEach(li => out.push(`<li class="leading-relaxed text-[0.84rem]">${inlineHtml(li)}</li>`));
+    listItems.forEach(li => out.push(`<li class="leading-relaxed text-[0.9rem]">${inlineHtml(li)}</li>`));
     out.push(`</${tag}>`);
     inList = false; listOrdered = false; listItems = [];
   }
@@ -612,7 +612,7 @@ function mdToHtml(md: string): string {
       continue;
     }
 
-    out.push(`<p class="my-2 text-slate-400 leading-relaxed text-[0.84rem]">${inlineHtml(line)}</p>`);
+    out.push(`<p class="my-2 text-slate-400 leading-relaxed text-[0.9rem]">${inlineHtml(line)}</p>`);
   }
 
   flushList(); flushTable(); flushBq(); flushCode();
@@ -1181,7 +1181,7 @@ function renderIndex(): string {
     const grid = g.items.map(d => `
       <a href="/docs/${d.slug}" class="doc-card block p-4 rounded-lg">
         ${d.section ? `<div class="section-label mb-1.5">${escHtml(d.section)}</div>` : ""}
-        <div class="text-[0.82rem] text-slate-300 group-hover:text-white font-medium leading-snug">${escHtml(d.title)}</div>
+        <div class="text-[0.88rem] text-slate-300 group-hover:text-white font-medium leading-snug">${escHtml(d.title)}</div>
       </a>`).join("\n");
     return `<section class="mb-10">
       <div class="flex items-center gap-3 mb-3">
@@ -1236,10 +1236,10 @@ function renderIndex(): string {
 
         <!-- Tab panels -->
         <div id="tab-http" class="tab-panel">
-          <p class="text-[0.72rem] text-slate-600 mb-2 font-mono">~/.claude/claude_desktop_config.json</p>
+          <p class="text-[0.78rem] text-slate-600 mb-2 font-mono">~/.claude/claude_desktop_config.json</p>
           <div class="relative">
             <button onclick="copyCode('code-http')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
-            <pre id="code-http" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.78rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">{
+            <pre id="code-http" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.84rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">{
   "mcpServers": {
     "ptx-isa": {
       "type": "http",
@@ -1251,10 +1251,10 @@ function renderIndex(): string {
         </div>
 
         <div id="tab-stdio" class="tab-panel hidden">
-          <p class="text-[0.72rem] text-slate-600 mb-2 font-mono">~/.claude.json  (or claude mcp add)</p>
+          <p class="text-[0.78rem] text-slate-600 mb-2 font-mono">~/.claude.json  (or claude mcp add)</p>
           <div class="relative">
             <button onclick="copyCode('code-stdio')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
-            <pre id="code-stdio" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.78rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">{
+            <pre id="code-stdio" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.84rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">{
   "mcpServers": {
     "ptx-isa": {
       "command": "npx",
@@ -1266,10 +1266,10 @@ function renderIndex(): string {
         </div>
 
         <div id="tab-local" class="tab-panel hidden">
-          <p class="text-[0.72rem] text-slate-600 mb-2 font-mono">Run locally with Bun, point your client at it</p>
+          <p class="text-[0.78rem] text-slate-600 mb-2 font-mono">Run locally with Bun, point your client at it</p>
           <div class="relative">
             <button onclick="copyCode('code-local')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
-            <pre id="code-local" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.78rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">cd mcp-server
+            <pre id="code-local" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.84rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">cd mcp-server
 bun install &amp;&amp; bun run sync-docs
 bun run start   # http://localhost:3000
 
@@ -1290,15 +1290,15 @@ bun run start   # http://localhost:3000
       <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
         <div class="doc-card rounded-lg p-3.5">
           <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">list_pages</div>
-          <div class="text-slate-500 text-[0.72rem] leading-snug">List all pages, optionally filtered by keyword</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">List all pages, optionally filtered by keyword</div>
         </div>
         <div class="doc-card rounded-lg p-3.5">
           <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">read_page</div>
-          <div class="text-slate-500 text-[0.72rem] leading-snug">Read a page&apos;s full Markdown by slug</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">Read a page&apos;s full Markdown by slug</div>
         </div>
         <div class="doc-card rounded-lg p-3.5">
           <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">search</div>
-          <div class="text-slate-500 text-[0.72rem] leading-snug">Relevance-ranked full-text search with contextual snippets</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">Relevance-ranked full-text search with contextual snippets</div>
         </div>
       </div>
     </section>
