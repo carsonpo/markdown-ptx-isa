@@ -477,10 +477,12 @@ function escHtml(s: string): string {
 
 function inlineHtml(raw: string): string {
   let s = escHtml(raw);
-  s = s.replace(/`([^`]+)`/g, '<code class="bg-[#0d1a2d] text-cyan-300 border border-cyan-900/40 px-1.5 py-px rounded text-[0.82em] font-mono">$1</code>');
+  s = s.replace(/`([^`]+)`/g, '<code class="bg-[#0d1a2d] text-cyan-300 border border-cyan-900/40 px-1.5 py-px rounded text-[0.85em] font-mono">$1</code>');
   s = s.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
   s = s.replace(/\*(.+?)\*/g, "<em class=\"italic\">$1</em>");
+  // Images before links (![alt](url) vs [text](url))
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="rounded-lg border border-white/[0.06] my-4 max-w-full" loading="lazy">');
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-cyan-400 hover:text-cyan-200 underline underline-offset-2 transition-colors">$1</a>');
   return s;
 }
@@ -497,21 +499,21 @@ function mdToHtml(md: string): string {
   function flushCode() {
     if (!inCode) return;
     const lang = codeLang ? `<span class="absolute top-2 right-3 text-[0.65rem] text-cyan-700 font-mono select-none uppercase tracking-widest">${escHtml(codeLang)}</span>` : "";
-    out.push(`<div class="relative my-5">${lang}<pre class="bg-[#060d1a] border border-cyan-900/30 rounded-lg p-5 overflow-x-auto text-[0.82rem] font-mono text-cyan-200 leading-relaxed shadow-[inset_0_1px_0_0_rgba(99,179,237,0.05)]"><code>${codeLines.map(escHtml).join("\n")}</code></pre></div>`);
+    out.push(`<div class="relative my-5">${lang}<pre class="bg-[#060d1a] border border-cyan-900/30 rounded-lg p-5 overflow-x-auto text-[0.84rem] font-mono text-cyan-200 leading-relaxed shadow-[inset_0_1px_0_0_rgba(99,179,237,0.05)]"><code>${codeLines.map(escHtml).join("\n")}</code></pre></div>`);
     inCode = false; codeLang = ""; codeLines = [];
   }
   function flushTable() {
     if (!inTable) return;
-    out.push('<div class="overflow-x-auto my-5 rounded-lg border border-white/[0.06]"><table class="w-full text-sm border-collapse">');
+    out.push('<div class="overflow-x-auto my-5 rounded-lg border border-white/[0.06]"><table class="w-full text-[0.84rem] border-collapse">');
     if (tableHead) {
       out.push("<thead><tr>");
-      tableHead.forEach(c => out.push(`<th class="text-left px-4 py-2.5 bg-white/[0.04] text-[0.65rem] font-semibold uppercase tracking-widest text-slate-400 border-b border-white/[0.06]">${inlineHtml(c.trim())}</th>`));
+      tableHead.forEach(c => out.push(`<th class="text-left px-4 py-2.5 bg-white/[0.04] text-[0.68rem] font-semibold uppercase tracking-widest text-slate-400 border-b border-white/[0.06]">${inlineHtml(c.trim())}</th>`));
       out.push("</tr></thead>");
     }
     out.push("<tbody>");
     tableRows.forEach((row) => {
       out.push('<tr class="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">');
-      row.forEach(c => out.push(`<td class="px-4 py-2.5 text-slate-300 text-sm">${inlineHtml(c.trim())}</td>`));
+      row.forEach(c => out.push(`<td class="px-4 py-2.5 text-slate-300 text-[0.84rem]">${inlineHtml(c.trim())}</td>`));
       out.push("</tr>");
     });
     out.push("</tbody></table></div>");
@@ -529,9 +531,9 @@ function mdToHtml(md: string): string {
     const tag = listOrdered ? "ol" : "ul";
     const cls = listOrdered
       ? 'class="list-decimal list-outside ml-5 my-3 space-y-1 text-slate-300"'
-      : 'class="list-disc list-outside ml-5 my-3 space-y-1 text-slate-300 marker:text-cyan-700"';
+      : 'class="list-disc list-outside ml-5 my-3 space-y-1.5 text-slate-300 marker:text-cyan-700"';
     out.push(`<${tag} ${cls}>`);
-    listItems.forEach(li => out.push(`<li class="leading-relaxed">${inlineHtml(li)}</li>`));
+    listItems.forEach(li => out.push(`<li class="leading-relaxed text-[0.84rem]">${inlineHtml(li)}</li>`));
     out.push(`</${tag}>`);
     inList = false; listOrdered = false; listItems = [];
   }
@@ -602,7 +604,15 @@ function mdToHtml(md: string): string {
 
     if (line.trim() === "") { flushList(); flushTable(); flushBq(); out.push(""); continue; }
 
-    out.push(`<p class="my-2 text-slate-400 leading-relaxed text-sm">${inlineHtml(line)}</p>`);
+    // Block-level image on its own line
+    const imgMatch = line.trim().match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (imgMatch) {
+      flushList(); flushTable(); flushBq();
+      out.push(`<figure class="my-5"><img src="${escHtml(imgMatch[2])}" alt="${escHtml(imgMatch[1])}" class="rounded-lg border border-white/[0.06] max-w-full" loading="lazy"></figure>`);
+      continue;
+    }
+
+    out.push(`<p class="my-2 text-slate-400 leading-relaxed text-[0.84rem]">${inlineHtml(line)}</p>`);
   }
 
   flushList(); flushTable(); flushBq(); flushCode();
@@ -636,7 +646,7 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
         ? "bg-cyan-500/10 text-cyan-300 border-l-2 border-cyan-400 pl-[10px]"
         : "text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border-l-2 border-transparent pl-[10px]";
       const sec = d.section ? `<span class="text-slate-700 text-[0.6rem] font-mono mr-1.5 flex-shrink-0 tabular-nums">${escHtml(d.section)}</span>` : "";
-      return `<a href="/docs/${d.slug}" class="flex items-start py-[4px] pr-3 text-[0.75rem] leading-snug transition-all duration-150 ${bg}">${sec}<span class="truncate">${escHtml(d.title)}</span></a>`;
+      return `<a href="/docs/${d.slug}" class="flex items-start py-[4px] pr-3 text-[0.8rem] leading-snug transition-all duration-150 ${bg}">${sec}<span>${escHtml(d.title)}</span></a>`;
     }).join("\n");
     return `<div class="mb-5">
       <p class="px-3 mb-1.5 text-[0.58rem] font-bold uppercase tracking-[0.15em] text-slate-600">${escHtml(g.label)}</p>
@@ -902,7 +912,7 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
   <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <!-- Sidebar -->
-  <aside id="sidebar" class="sidebar w-[15.5rem] flex-shrink-0 flex flex-col overflow-hidden">
+  <aside id="sidebar" class="sidebar w-[19rem] flex-shrink-0 flex flex-col overflow-hidden">
     <div class="flex-shrink-0 px-5 py-5 border-b border-white/[0.06] flex items-center justify-between">
       <a href="/" class="block group">
         <div class="text-[0.58rem] font-bold uppercase tracking-[0.18em] text-slate-600 mb-1">NVIDIA</div>
