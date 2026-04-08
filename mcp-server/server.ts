@@ -710,6 +710,30 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
       backdrop-filter: blur(12px);
     }
 
+    /* Mobile sidebar overlay */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed; inset: 0; z-index: 50;
+        width: 100% !important; max-width: 300px;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        border-right: 1px solid rgba(99,179,237,0.15);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay {
+        position: fixed; inset: 0; z-index: 49;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(2px);
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      .sidebar-overlay.active { opacity: 1; pointer-events: all; }
+    }
+    @media (min-width: 769px) {
+      .sidebar-overlay { display: none; }
+      .mobile-header { display: none !important; }
+    }
+
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(99,179,237,0.2); border-radius: 9999px; }
@@ -728,6 +752,9 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
     }
 
     .prose-area { max-width: 820px; }
+    @media (max-width: 768px) {
+      .prose-area { padding-left: 1.25rem !important; padding-right: 1.25rem !important; padding-top: 1.25rem !important; }
+    }
 
     .section-label {
       font-size: 0.6rem;
@@ -763,6 +790,16 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
       pointer-events: none;
     }
     .search-modal.active { opacity: 1; transform: translateX(-50%) scale(1); pointer-events: all; }
+    @media (max-width: 768px) {
+      .search-modal {
+        top: 0; left: 0; right: 0; bottom: 0;
+        width: 100%; max-width: 100%; max-height: 100%;
+        border-radius: 0; border: none;
+        transform: translateY(20px);
+      }
+      .search-modal.active { transform: translateY(0); }
+      .search-footer { display: none; }
+    }
 
     .search-input-wrap {
       display: flex; align-items: center; gap: 8px;
@@ -846,20 +883,41 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
 
 <div class="relative z-10 flex h-screen overflow-hidden">
 
+  <!-- Mobile header -->
+  <div class="mobile-header fixed top-0 left-0 right-0 z-40 flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]" style="background:rgba(7,13,26,0.92);backdrop-filter:blur(12px);">
+    <button onclick="toggleSidebar()" aria-label="Menu" class="p-1.5 -ml-1 rounded-lg hover:bg-white/[0.06] transition-colors">
+      <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <a href="/" class="flex items-baseline gap-1.5">
+      <span class="text-white font-bold text-sm tracking-tight">PTX ISA</span>
+      <span class="text-cyan-400 font-bold text-sm">v9.2</span>
+    </a>
+    <div class="flex-1"></div>
+    <button onclick="openSearch()" aria-label="Search" class="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors">
+      <svg class="w-4 h-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
+    </button>
+  </div>
+
+  <!-- Sidebar overlay (mobile) -->
+  <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+
   <!-- Sidebar -->
-  <aside class="sidebar w-[15.5rem] flex-shrink-0 flex flex-col overflow-hidden">
-    <div class="flex-shrink-0 px-5 py-5 border-b border-white/[0.06]">
+  <aside id="sidebar" class="sidebar w-[15.5rem] flex-shrink-0 flex flex-col overflow-hidden">
+    <div class="flex-shrink-0 px-5 py-5 border-b border-white/[0.06] flex items-center justify-between">
       <a href="/" class="block group">
         <div class="text-[0.58rem] font-bold uppercase tracking-[0.18em] text-slate-600 mb-1">NVIDIA</div>
         <div class="text-white font-bold text-[0.95rem] tracking-tight leading-none group-hover:text-cyan-300 transition-colors">PTX ISA <span class="text-cyan-400">v9.2</span></div>
         <div class="text-[0.6rem] text-slate-600 mt-1 uppercase tracking-widest">Reference</div>
       </a>
+      <button onclick="closeSidebar()" class="md:hidden p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors -mr-2" aria-label="Close menu">
+        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </div>
     <nav class="flex-1 overflow-y-auto py-4 px-3">
-      <button onclick="openSearch()" class="w-full flex items-center gap-2 px-3 pl-[12px] py-[7px] text-[0.75rem] text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border border-white/[0.06] hover:border-cyan-800/50 rounded-lg transition-all duration-150 mb-3 group">
+      <button onclick="openSearch(); closeSidebar();" class="w-full flex items-center gap-2 px-3 pl-[12px] py-[7px] text-[0.75rem] text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border border-white/[0.06] hover:border-cyan-800/50 rounded-lg transition-all duration-150 mb-3 group">
         <svg class="w-3 h-3 flex-shrink-0 opacity-40 group-hover:opacity-70 transition-opacity" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
         <span class="flex-1 text-left">Search docs...</span>
-        <kbd class="text-[0.55rem] text-slate-700 border border-white/[0.06] rounded px-1.5 py-px font-mono">\u2318F</kbd>
+        <kbd class="hidden sm:inline text-[0.55rem] text-slate-700 border border-white/[0.06] rounded px-1.5 py-px font-mono">\u2318F</kbd>
       </button>
       <a href="/" class="flex items-center gap-2 px-3 pl-[12px] py-[5px] text-[0.75rem] text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border-l-2 border-transparent hover:border-cyan-700 transition-all duration-150 mb-4">
         <svg class="w-3 h-3 flex-shrink-0 opacity-50" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
@@ -870,13 +928,68 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
   </aside>
 
   <!-- Content -->
-  <main class="flex-1 overflow-y-auto">
+  <main id="main-content" class="flex-1 overflow-y-auto">
     <div class="prose-area mx-auto px-10 py-10">
       ${body}
     </div>
   </main>
 
 </div>
+
+<script>
+(function() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const mainContent = document.getElementById('main-content');
+
+  // Add top padding on mobile for fixed header
+  function applyMobilePadding() {
+    if (window.innerWidth <= 768) {
+      mainContent.style.paddingTop = '56px';
+    } else {
+      mainContent.style.paddingTop = '';
+    }
+  }
+  applyMobilePadding();
+  window.addEventListener('resize', applyMobilePadding);
+
+  window.toggleSidebar = function() {
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('active');
+    document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+  };
+  window.closeSidebar = function() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+  };
+
+  // Close sidebar on nav link click (mobile)
+  sidebar.querySelectorAll('a[href]').forEach(function(a) {
+    a.addEventListener('click', function() {
+      if (window.innerWidth <= 768) closeSidebar();
+    });
+  });
+
+  // Swipe to open/close
+  let touchStartX = 0;
+  let touchStartY = 0;
+  document.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', function(e) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dy) > Math.abs(dx)) return; // vertical swipe
+    if (dx > 60 && touchStartX < 40 && !sidebar.classList.contains('open')) {
+      toggleSidebar();
+    } else if (dx < -60 && sidebar.classList.contains('open')) {
+      closeSidebar();
+    }
+  }, { passive: true });
+})();
+</script>
 
 <!-- Search modal -->
 <div id="search-backdrop" class="search-backdrop" onclick="closeSearch()"></div>
@@ -1073,7 +1186,7 @@ function renderIndex(): string {
   const body = `
     <header class="mb-10">
       <div class="text-[0.6rem] font-bold uppercase tracking-[0.2em] text-cyan-700 mb-3">NVIDIA / PTX ISA</div>
-      <h1 class="text-[2.2rem] font-bold text-white tracking-tight leading-none mb-1">
+      <h1 class="text-[1.5rem] sm:text-[2.2rem] font-bold text-white tracking-tight leading-none mb-1">
         PTX ISA <span class="text-cyan-400">v9.2</span>
       </h1>
       <div class="text-[0.6rem] uppercase tracking-[0.15em] text-slate-600 mb-5">Parallel Thread Execution Instruction Set Architecture</div>
@@ -1096,7 +1209,7 @@ function renderIndex(): string {
       <div x-data="{ tab: 'http' }" class="space-y-3">
 
         <!-- Tab buttons -->
-        <div class="flex gap-1.5 mb-1">
+        <div class="flex flex-wrap gap-1.5 mb-1">
           <button onclick="showTab('http', this)" id="tab-btn-http"
             class="tab-btn active px-3 py-1.5 text-[0.7rem] font-mono rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 transition-all">
             HTTP (Claude Desktop)
