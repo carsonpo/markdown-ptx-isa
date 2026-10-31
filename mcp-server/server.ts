@@ -363,6 +363,16 @@ const NAV_GROUPS: NavGroup[] = (() => {
   return out;
 })();
 
+/**
+ * Sidebar label: drop the category prefix the spec repeats on every page
+ * ("Logic and Shift Instructions: and" → "and", "Special Registers: %tid" → "%tid",
+ * "Matrix Fragments for mma.m16n8k16 with integer type" stays as is).
+ */
+function shortTitle(title: string): string {
+  const m = title.match(/^(.*?(?:Instructions?|Directives?|Registers?|Strings|Operations?|Cache Operators))\s*:\s*(.+)$/);
+  return m ? m[2].trim() : title;
+}
+
 function groupForSlug(slug: string): string {
   const parts = slug.split("/");
   if (parts.length === 1) return "";
@@ -393,7 +403,7 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
         ? "bg-cyan-500/10 text-cyan-300 border-l-2 border-cyan-400 pl-[10px]"
         : "text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border-l-2 border-transparent pl-[10px]";
       const sec = d.section ? `<span class="text-slate-700 text-[0.6rem] font-mono mr-1.5 flex-shrink-0 tabular-nums">${escHtml(d.section)}</span>` : "";
-      const label = d.slug.endsWith("/README") ? "Overview" : d.title;
+      const label = d.slug.endsWith("/README") ? "Overview" : shortTitle(d.title);
       return `<a href="/docs/${d.slug}" class="flex items-start py-[4px] pr-3 text-[0.8rem] leading-snug transition-all duration-150 ${bg}">${sec}<span>${escHtml(label)}</span></a>`;
     }).join("\n");
     return `<details class="mb-2 group" ${open ? "open" : ""}>
