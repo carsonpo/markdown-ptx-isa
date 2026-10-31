@@ -18,7 +18,9 @@ How many blocks a multiprocessor can process at once depends on how many registe
 
 ![Hardware Model](https://docs.nvidia.com/cuda/parallel-thread-execution/_images/hardware-model.png)
 
-*Figure 4 Hardware Model — A set of SIMT multiprocessors with on-chip shared memory.*
+**Figure 4** Hardware Model
+
+A set of SIMT multiprocessors with on-chip shared memory.
 
 ## 3.2. Independent Thread Scheduling
 

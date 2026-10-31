@@ -1,0 +1,29 @@
+# 10.3. Special Registers: %laneid
+
+**%laneid**
+
+Lane Identifier.
+
+## Syntax (predefined)
+
+```ptx
+.sreg .u32 %laneid;
+```
+
+## Description
+
+A predefined, read-only special register that returns the thread's lane within the warp. The lane identifier ranges from zero to `WARP_SZ-1`.
+
+## PTX ISA Notes
+
+Introduced in PTX ISA version 1.3.
+
+## Target ISA Notes
+
+Supported on all target architectures.
+
+## Examples
+
+```ptx
+mov.u32  %r, %laneid;
+```

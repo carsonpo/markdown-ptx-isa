@@ -1,0 +1,74 @@
+# 9.7.5.3. Mixed Precision Floating Point Instructions: fma
+
+**fma**
+
+Fused multiply-add.
+
+## Syntax
+
+```ptx
+fma{.rnd}{.sat}.cdtype.abtype  d, a, b, c;
+fma{.rnd}.dtype.atype.btype.ctype d, a, b, c;
+
+.abtype = { .f16, .bf16 };
+.cdtype = { .f32 };
+.atype  = { .f16x2, .bf16x2 };
+.btype  = .ctype = .dtype = { .f32x2 };
+.rnd    = { .rn, .rz, .rm, .rp };
+```
+
+## Description
+
+Converts input operands `a`, `b` and `c` to `.cdtype`/`.dtype` type. The converted values are then used to perform fused multiply-add operation with no loss of precision in the intermediate product and addition. The resulting value is stored in the destination operand `d`.
+
+## Semantics
+
+```ptx
+if (cdtype == .f32) {  // abtype = .f16/.bf16, upconvert
+    d = convert(a) * convert(b) + c;
+} else if (dtype == .f32x2) {  // atype = .f16x2/.bf16x2, upconvert
+    d[0:31] = convert(a[0:15]) * convert(b[0:15]) + c[0:31];
+    d[32:63] = convert(a[16:31]) * convert(b[16:31]) + c[32:63];
+}
+```
+
+## Notes
+
+`fma.f32.{f16/bf16}` computes the product of `a` and `b` to infinite precision and then adds `c` to this product, again in infinite precision. The resulting value is then rounded to single precision using the rounding mode specified by `.rnd`.
+
+Rounding modifiers(no default):
+
+- `.rn` — mantissa LSB rounds to nearest even
+- `.rz` — mantissa LSB rounds towards zero
+- `.rm` — mantissa LSB rounds towards negative infinity
+- `.rp` — mantissa LSB rounds towards positive infinity
+
+Subnormal numbers:
+
+- By default, subnormal numbers are supported.
+
+Saturation modifier:
+
+- `fma.sat` clamps the result to [0.0, 1.0]. NaN results are flushed to +0.0f.
+
+## PTX ISA Notes
+
+`fma.f32.{f16/bf16}` introduced in PTX ISA version 8.6.
+
+`fma` with `.f16x2`/`.bf16x2`/`.f32x2` types introduced in PTX ISA version 9.4.
+
+## Target ISA Notes
+
+`fma.f32.{f16/bf16}` requires `sm_100` or higher.
+
+`fma` with `.f16x2`/`.bf16x2`/`.f32x2` types is supported on following family-specific architectures:
+
+- `sm_107f` or higher in the same family
+
+## Examples
+
+```ptx
+.reg .f32 fc, fd;
+.reg .f16 ha, hb;
+fma.rz.sat.f32.f16.sat   fd, ha, hb, fc;
+```

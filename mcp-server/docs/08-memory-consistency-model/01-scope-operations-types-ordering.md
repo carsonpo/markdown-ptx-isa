@@ -18,7 +18,7 @@ When communicating with the host CPU, certain strong operations with system scop
 
 The fundamental storage unit in the PTX memory model is a byte, consisting of 8 bits. Each state space available to a PTX program is a sequence of contiguous bytes in memory. Every byte in a PTX state space has a unique address relative to all threads that have access to the same state space.
 
-Each PTX memory instruction specifies an address operand and a data type. The address operand contains a virtual address that gets converted to a physical address during memory access. The physical address and the size of the data type together define a physical memory location, which is the range of bytes starting from the physical address and extending up to the size of the data type in bytes.
+Each PTX memory instruction specifies an address operand and a data type. The address operand contains a virtual address that gets converted to a physical address during memory access. The physical address and the size of the data type together define a physical memory location, which is the range of bytes starting from the physical address and extending up to the size of the data type in bytes. Analogously, the address operand together with the size of the data type define the range of virtual memory addresses accessed by the memory operation.
 
 The memory consistency model specification uses the terms "address" or "memory address" to indicate a virtual address, and the term "memory location" to indicate a physical memory location.
 
@@ -26,7 +26,7 @@ Each PTX memory instruction also specifies the operation — either a read, a wr
 
 ### 8.2.1. Overlap
 
-Two memory locations are said to overlap when the starting address of one location is within the range of bytes constituting the other location. Two memory operations are said to overlap when they specify the same virtual address and the corresponding memory locations overlap. The overlap is said to be complete when both memory locations are identical, and it is said to be partial otherwise.
+Two memory locations are said to overlap when the starting address of one location is within the range of bytes constituting the other location. Two memory operations are said to overlap when the range of virtual addresses accessed by the two operations intersect. The overlap is said to be complete when both memory locations are identical, and it is said to be partial otherwise.
 
 ### 8.2.2. Aliases
 
@@ -44,7 +44,7 @@ The memory consistency model relates operations executed on memory locations wit
 
 ### 8.2.5. Memory Operations on Packed Data Types
 
-A packed data type consists of two values of the same scalar data type, as described in Packed Data Types. These values are accessed in adjacent memory locations. A memory operation on a packed data type is modelled as a pair of equivalent memory operations on the scalar data type, executed in an unspecified order on each element of the packed data.
+A packed data type consists of two values of the same scalar data type, as described in [Packed Data Types](../05-state-spaces-types-variables/02-types.md). These values are accessed in adjacent memory locations. A memory operation on a packed data type is modelled as a pair of equivalent memory operations on the scalar data type, executed in an unspecified order on each element of the packed data.
 
 ### 8.2.6. Initialization
 
@@ -58,7 +58,7 @@ The relations defined in the memory consistency model are independent of state s
 
 For simplicity, the rest of the document refers to the following operation types, instead of mentioning specific instructions that give rise to them.
 
-**Table 20 — Operation Types**
+**Table 20** Operation Types
 
 | Operation Type | Instruction/Operation |
 |---|---|
@@ -86,7 +86,7 @@ The semantic meaning of mmio operations cannot be defined precisely as it is def
 
 - Reads are always performed, and are not forwarded, prefetched, combined, or allowed to hit any cache within the scope specified.
 
-As an exception, in some implementations, the surrounding locations may also be loaded. In such cases the amount of data loaded is implementation specific and varies between 32 and 128 bytes in size.
+  - As an exception, in some implementations, the surrounding locations may also be loaded. In such cases the amount of data loaded is implementation specific and varies between 32 and 128 bytes in size.
 
 ### 8.4.2. volatile Operation
 
@@ -96,9 +96,7 @@ A volatile operation is a memory operation with `.volatile` qualifier specified.
 
 - Volatile instructions are not re-ordered around other volatile instructions, but the memory operations performed by those instructions may be re-ordered around each other.
 
-> **Note**
->
-> PTX volatile operations are intended for compilers to lower volatile read and write operations from CUDA C++, and other programming languages sharing CUDA C++ volatile semantics, to PTX.
+> **Note:** PTX volatile operations are intended for compilers to lower volatile read and write operations from CUDA C++, and other programming languages sharing CUDA C++ volatile semantics, to PTX.
 >
 > Since volatile operations are relaxed at system-scope with extra constraints, prefer using other strong read or write operations (e.g. `ld.relaxed.sys` or `st.relaxed.sys`) for Inter-Thread Synchronization instead, which may deliver better performance.
 >
@@ -108,7 +106,7 @@ A volatile operation is a memory operation with `.volatile` qualifier specified.
 
 Each strong operation must specify a scope, which is the set of threads that may interact directly with that operation and establish any of the relations described in the memory consistency model. There are four scopes:
 
-**Table 21 — Scopes**
+**Table 21** Scopes
 
 | Scope | Description |
 |---|---|
@@ -123,9 +121,43 @@ Note that the warp is not a scope; the CTA is the smallest collection of threads
 
 A memory proxy, or a proxy is an abstract label applied to a method of memory access. When two memory operations use distinct methods of memory access, they are said to be different proxies.
 
-Memory operations as defined in Operation types use generic method of memory access, i.e. a generic proxy. Other operations such as textures and surfaces all use distinct methods of memory access, also distinct from the generic method.
-
 A proxy fence is required to synchronize memory operations across different proxies. Although virtual aliases use the generic method of memory access, since using distinct virtual addresses behaves as if using different proxies, they require a proxy fence to establish memory ordering.
+
+Unless otherwise specified, memory operations as defined in [Operation types](#84-operation-types) use generic method of memory access, i.e. a generic proxy. Operations using methods of access distinct from the generic method include:
+
+- textures and surface accesses,
+
+- accesses to the same location via the same proxy using distinct virtual memory addresses,
+
+- async-proxy and tensormap-proxy accesses by `.async.bulk` operations,
+
+- fabric-proxy accesses by fabric operations,
+
+- readonly-proxy accesses by `ld.proxy::readonly` operations.
+
+The readonly proxy may be used to load read-only data. Refer to [Data Movement and Conversion Instructions: `ld`](../09-instruction-set/10-data-movement-conversion/ld.md) for details.
+
+### 8.6.1. Strong Proxy Accesses
+
+Strong modifications through
+
+- generic-proxy,
+
+- async-proxy,
+
+- tensormap-proxy,
+
+- fabric-proxy,
+
+eventually become observable by strong accesses to the same location performed via a different proxy in that list, if modification and access are:
+
+- system-scope - even if these used distinct memory addresses - or
+
+- gpu-scope if the different proxies involved are in the following list:
+
+  - async-proxy,
+
+  - generic-proxy.
 
 ## 8.7. Morally strong operations
 
@@ -173,6 +205,14 @@ A release pattern on a location M consists of one of the following:
 
   E.g.: `fence.release; st.relaxed [M];` or `fence.release; atom.relaxed [M];`
 
+- Or a release or acquire-release memory fence followed in program order by an asynchronous operation that performs a strong write on M
+
+  E.g.: `fence.release; cp.async.bulk.global.shared.relaxed.sys.b128 [M];`
+
+- Or a release asynchronous operation that performs a strong write on M
+
+  E.g.: `st.async.release.sys [M];`
+
 Any memory synchronization established by a release pattern only affects operations occurring in program order before the first instruction in that pattern.
 
 An acquire pattern on a location M consists of one of the following:
@@ -189,11 +229,21 @@ An acquire pattern on a location M consists of one of the following:
 
   E.g.: `ld.relaxed [M]; fence.acquire;` or `atom.relaxed [M]; fence.acquire;`
 
+- Or first observing completion of an asynchronous operation that performs a strong read on M and then this observation is followed by an acquire memory fence in program order
+
+  E.g.:
+
+  ```ptx
+  cp.async.bulk.mbarrier::complete_tx::bytes.relaxed.sys.b128 [dst], [M], size, [barrier]; // strong read on M
+  mbarrier.try_wait.relaxed p, [barrier];  // observes completion of async op that performs strong read on M
+  @p fence.acquire;                        // acquire fence in program order after observing completion
+  ```
+
 Any memory synchronization established by an acquire pattern only affects operations occurring in program order after the last instruction in that pattern.
 
 Note that while atomic reductions conceptually perform a strong read as part of its read-modify-write sequence, this strong read does not form an acquire pattern.
 
-E.g.: `red.add [M], 1; fence.acquire;` is not an acquire pattern.
+- E.g.: `red.add [M], 1; fence.acquire;` is not an acquire pattern.
 
 [^1]: For both release and acquire patterns, this effect is further extended to operations in other threads through the transitive nature of causality order.
 
@@ -272,8 +322,11 @@ An operation X precedes an operation Y in base causality order if:
 - X synchronizes with Y, or
 
 - For some operation Z,
+
   - X precedes Z in program order and Z precedes Y in base causality order, or
+
   - X precedes Z in base causality order and Z precedes Y in program order, or
+
   - X precedes Z in base causality order and Z precedes Y in base causality order.
 
 **Proxy-preserved base causality order**

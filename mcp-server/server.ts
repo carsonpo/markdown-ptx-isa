@@ -1,7 +1,7 @@
 /**
- * PTX ISA v9.2 — Combined MCP + Documentation Server
+ * PTX ISA v9.4 — Combined MCP + Documentation Server
  *
- * Serves the human-readable Tailwind documentation browser at /
+ * Serves the human-readable documentation browser at /
  * plus the MCP server (JSON-RPC 2.0 over stdio and POST /mcp),
  * and a REST API at /api/*.
  *
@@ -9,354 +9,19 @@
  */
 
 import { AutoRouter, error, json } from "itty-router";
-import { readdirSync, statSync, readFileSync } from "node:fs";
+import { ALL_DOCS, DOC_MAP, README_CONTENT, anchorFor, parseHeading, safeSlug, type DocEntry } from "./lib/docs";
+import {
+  ISA_VERSION, MCP_TOOLS, MCP_SERVER_INSTRUCTIONS,
+  toolSearchText, toolSearchJson, toolRead, toolLookup, toolListText, toolListJson,
+} from "./lib/tools";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const DOCS_ROOT = import.meta.dir + "/docs";
 const HTTP_PORT = parseInt(process.env.PORT ?? "3000", 10);
-
-// ---------------------------------------------------------------------------
-// Filesystem helpers
-// ---------------------------------------------------------------------------
-
-function bunReadText(absPath: string): string {
-  return readFileSync(absPath, "utf8");
-}
-
-function safeSlug(raw: string): string | null {
-  const slug = raw.replace(/^\/+|\/+$/g, "").replace(/\.md$/, "");
-  if (/(?:^|\/)\.\.|[\x00]/.test(slug)) return null;
-  const resolved = `${DOCS_ROOT}/${slug}.md`;
-  if (!resolved.startsWith(DOCS_ROOT + "/")) return null;
-  return slug;
-}
-
-const WALK_SKIP = new Set(["node_modules", ".git"]);
-
-function bunWalk(dir: string): string[] {
-  const out: string[] = [];
-  for (const name of readdirSync(dir).sort()) {
-    if (WALK_SKIP.has(name)) continue;
-    const full = `${dir}/${name}`;
-    const st = statSync(full);
-    if (st.isDirectory()) out.push(...bunWalk(full));
-    else if (name.endsWith(".md") && st.size > 0) out.push(full);
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// Document index
-// ---------------------------------------------------------------------------
-
-interface DocEntry {
-  path: string;       // relative from DOCS_ROOT
-  slug: string;       // path without .md
-  title: string;
-  section: string | null;
-  crumbs: string[];   // slug parts for breadcrumb
-}
-
-function extractTitle(src: string, fallbackSlug?: string): { title: string; section: string | null } {
-  const m = src.match(/^#{1,3}\s+(.+)$/m);
-  if (!m) {
-    if (fallbackSlug) {
-      const name = fallbackSlug.split("/").pop() ?? fallbackSlug;
-      const label = name.replace(/^\d+-/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-      return { title: label, section: null };
-    }
-    return { title: "(untitled)", section: null };
-  }
-  const raw = m[1].trim();
-  const sm = raw.match(/^(\d+(?:\.\d+)*\.?)\s+(.+)$/);
-  if (sm) return { title: sm[2].trim(), section: sm[1].replace(/\.$/, "") };
-  return { title: raw, section: null };
-}
-
-const README_CONTENT = bunReadText(`${DOCS_ROOT}/README.md`);
-
-const ALL_DOCS: DocEntry[] = bunWalk(DOCS_ROOT)
-  .filter((p) => !p.endsWith("/README.md"))
-  .map((abs) => {
-    const rel = abs.slice(DOCS_ROOT.length + 1).replace(/\\/g, "/");
-    const slug = rel.replace(/\.md$/, "");
-    const { title, section } = extractTitle(bunReadText(abs), slug);
-    return { path: rel, slug, title, section, crumbs: slug.split("/") };
-  });
-
-const DOC_MAP = new Map<string, DocEntry>(ALL_DOCS.map((d) => [d.slug, d]));
-
-// ---------------------------------------------------------------------------
-// Search index — built once at startup for fast queries
-// ---------------------------------------------------------------------------
-
-interface SearchDoc {
-  slug: string;
-  title: string;
-  section: string | null;
-  content: string;
-  lines: string[];           // original lines
-  linesLower: string[];      // lowercased for matching
-  tokens: Map<string, number>; // term → frequency
-  totalTokens: number;
-}
-
-function tokenize(text: string): string[] {
-  return text.toLowerCase().match(/[a-z0-9_.]+/g) ?? [];
-}
-
-const SEARCH_DOCS: SearchDoc[] = [];
-const IDF: Map<string, number> = new Map();
-
-// Build index at startup
-(function buildSearchIndex() {
-  const docFreq = new Map<string, number>();
-
-  for (const entry of ALL_DOCS) {
-    const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
-    const lines = content.split("\n");
-    const linesLower = lines.map(l => l.toLowerCase());
-    const words = tokenize(content);
-    const tokens = new Map<string, number>();
-    for (const w of words) {
-      tokens.set(w, (tokens.get(w) ?? 0) + 1);
-    }
-    // track which terms appear in which docs
-    for (const term of tokens.keys()) {
-      docFreq.set(term, (docFreq.get(term) ?? 0) + 1);
-    }
-    SEARCH_DOCS.push({
-      slug: entry.slug,
-      title: entry.title,
-      section: entry.section,
-      content,
-      lines,
-      linesLower,
-      tokens,
-      totalTokens: words.length,
-    });
-  }
-
-  // Compute IDF for all terms
-  const N = SEARCH_DOCS.length;
-  for (const [term, df] of docFreq) {
-    IDF.set(term, Math.log((N + 1) / (df + 1)) + 1);
-  }
-})();
-
-// ---------------------------------------------------------------------------
-// MCP tool implementations
-// ---------------------------------------------------------------------------
-
-function toolList(args: { filter?: string }): object {
-  const filter = args.filter?.toLowerCase();
-  const docs = filter
-    ? ALL_DOCS.filter(
-        (d) =>
-          d.title.toLowerCase().includes(filter) ||
-          d.slug.toLowerCase().includes(filter) ||
-          (d.section ?? "").includes(filter)
-      )
-    : ALL_DOCS;
-  return {
-    total: docs.length,
-    documents: docs.map((d) => ({ slug: d.slug, title: d.title, section: d.section, path: d.path })),
-  };
-}
-
-function toolRead(args: { slug: string }): object {
-  if (!args.slug) return { error: "slug is required" };
-  if (args.slug === "" || args.slug === "README" || args.slug === "overview") {
-    return { slug: "README", title: "PTX ISA v9.2 Overview", content: README_CONTENT };
-  }
-  const slug = safeSlug(args.slug);
-  if (!slug) return { error: "Invalid slug" };
-  const entry = DOC_MAP.get(slug);
-  if (!entry) {
-    const candidate = ALL_DOCS.find(
-      (d) => d.slug.includes(slug) || d.title.toLowerCase().includes(slug.toLowerCase())
-    );
-    if (candidate) {
-      const content = bunReadText(`${DOCS_ROOT}/${candidate.path}`);
-      return { slug: candidate.slug, title: candidate.title, content, fuzzy_match: true };
-    }
-    return { error: `No document found for slug "${args.slug}"` };
-  }
-  const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
-  return { slug: entry.slug, title: entry.title, section: entry.section, content };
-}
-
-function toolSearch(args: { query: string; max_results?: number }): object {
-  if (!args.query) return { error: "query is required" };
-  const maxResults = Math.min(args.max_results ?? 20, 50);
-  const queryLower = args.query.toLowerCase();
-  const queryTerms = tokenize(args.query);
-
-  if (queryTerms.length === 0) return { error: "query contains no searchable terms" };
-
-  const scored: Array<{
-    slug: string;
-    title: string;
-    section: string | null;
-    score: number;
-    snippets: Array<{ line_number: number; text: string; }>;
-  }> = [];
-
-  for (const doc of SEARCH_DOCS) {
-    // Phase 1: Check if document has any relevance
-    const hasExactPhrase = doc.content.toLowerCase().includes(queryLower);
-    const matchingTerms = queryTerms.filter(t => doc.tokens.has(t));
-    if (matchingTerms.length === 0 && !hasExactPhrase) continue;
-
-    // Phase 2: Score the document (TF-IDF inspired)
-    let score = 0;
-
-    // Exact phrase match bonus (huge weight)
-    if (hasExactPhrase) score += 50;
-
-    // Title match bonus
-    const titleLower = doc.title.toLowerCase();
-    if (titleLower.includes(queryLower)) score += 100;
-    for (const t of queryTerms) {
-      if (titleLower.includes(t)) score += 20;
-    }
-
-    // Section number match
-    if (doc.section && queryLower.includes(doc.section)) score += 30;
-
-    // TF-IDF score for each query term
-    for (const t of matchingTerms) {
-      const tf = (doc.tokens.get(t) ?? 0) / doc.totalTokens;
-      const idf = IDF.get(t) ?? 1;
-      score += tf * idf * 10;
-    }
-
-    // Term coverage bonus — reward docs that match more query terms
-    score += (matchingTerms.length / queryTerms.length) * 15;
-
-    // Phase 3: Extract contextual snippets
-    const snippets: Array<{ line_number: number; text: string }> = [];
-    const usedLines = new Set<number>();
-    const CONTEXT = 1; // lines of context around match
-
-    for (let i = 0; i < doc.linesLower.length && snippets.length < 5; i++) {
-      const lineLower = doc.linesLower[i];
-      const lineHasMatch = lineLower.includes(queryLower) ||
-        queryTerms.some(t => lineLower.includes(t));
-
-      if (lineHasMatch && !usedLines.has(i)) {
-        // Gather context lines
-        const start = Math.max(0, i - CONTEXT);
-        const end = Math.min(doc.lines.length - 1, i + CONTEXT);
-        const contextLines: string[] = [];
-        for (let j = start; j <= end; j++) {
-          usedLines.add(j);
-          const trimmed = doc.lines[j].trim();
-          if (trimmed) contextLines.push(trimmed);
-        }
-        if (contextLines.length > 0) {
-          snippets.push({
-            line_number: i + 1,
-            text: contextLines.join("\n"),
-          });
-        }
-      }
-    }
-
-    if (snippets.length > 0 || score > 30) {
-      scored.push({ slug: doc.slug, title: doc.title, section: doc.section, score, snippets });
-    }
-  }
-
-  // Sort by score descending
-  scored.sort((a, b) => b.score - a.score);
-  const results = scored.slice(0, maxResults);
-
-  return {
-    query: args.query,
-    total: results.length,
-    results: results.map(r => ({
-      slug: r.slug,
-      title: r.title,
-      section: r.section,
-      relevance: Math.round(r.score * 100) / 100,
-      snippets: r.snippets,
-    })),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// MCP tool definitions
-// ---------------------------------------------------------------------------
-
-const MCP_TOOLS = [
-  {
-    name: "list_pages",
-    description:
-      "List all available PTX ISA v9.2 documentation pages. " +
-      "Returns an array of {slug, title, section, path} for every page. " +
-      "Use the optional filter parameter to narrow results by keyword matching against title, slug, or section number. " +
-      "Use this to discover slugs before calling read_page.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        filter: {
-          type: "string",
-          description: "Optional keyword to filter by. Matches against page title, slug, and section number. " +
-            'Examples: "mma", "texture", "9.7.14", "floating-point".',
-        },
-      },
-    },
-  },
-  {
-    name: "read_page",
-    description:
-      "Read the full Markdown content of a specific PTX ISA documentation page. " +
-      "Accepts a document slug (from list_pages or search results). " +
-      "Supports fuzzy matching — if the exact slug isn't found, the closest match is returned. " +
-      'Pass slug="overview" or slug="README" for the top-level ISA overview.',
-    inputSchema: {
-      type: "object",
-      properties: {
-        slug: {
-          type: "string",
-          description: 'Document slug, e.g. "09-instruction-set/01-integer-arithmetic/add", ' +
-            '"04-syntax", "09-instruction-set/14-warp-level-mma/mma/ldmatrix". ' +
-            "Get valid slugs from list_pages or search.",
-        },
-      },
-      required: ["slug"],
-    },
-  },
-  {
-    name: "search",
-    description:
-      "Full-text search across all PTX ISA v9.2 documentation. " +
-      "Returns relevance-ranked results with contextual snippets (surrounding lines). " +
-      "Supports multi-word queries — results are scored by TF-IDF relevance, exact phrase matches, " +
-      "and title matches. Each result includes the page slug, title, relevance score, and up to 5 snippets " +
-      "with line numbers for precise referencing. " +
-      'Examples: "shared memory fence", "wgmma async", "ldmatrix", "tensor descriptor".',
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: {
-          type: "string",
-          description: "Search query — can be a single keyword, multi-word phrase, instruction name, " +
-            'or concept. Examples: "atom.cas", "memory consistency", "tcgen05.st".',
-        },
-        max_results: {
-          type: "number",
-          description: "Maximum number of results to return (default 20, max 50).",
-        },
-      },
-      required: ["query"],
-    },
-  },
-];
+const SERVER_VERSION = "3.0.0";
+const SUPPORTED_PROTOCOLS = new Set(["2024-11-05", "2025-03-26", "2025-06-18"]);
 
 // ---------------------------------------------------------------------------
 // JSON-RPC helpers
@@ -374,6 +39,10 @@ const rpcError = (id: JsonRpcId, code: number, message: string) =>
 // MCP dispatcher
 // ---------------------------------------------------------------------------
 
+function textResult(id: JsonRpcId, text: string, isError = false): string {
+  return rpcResult(id, { content: [{ type: "text", text }], isError });
+}
+
 function handleMcpRequest(req: {
   jsonrpc?: string;
   id?: JsonRpcId;
@@ -384,14 +53,18 @@ function handleMcpRequest(req: {
   const params = req.params ?? {};
 
   switch (req.method) {
-    case "initialize":
+    case "initialize": {
+      const requested = String(params.protocolVersion ?? "2024-11-05");
       return rpcResult(id, {
-        protocolVersion: "2024-11-05",
-        serverInfo: { name: "ptx-isa", version: "2.0.0" },
-        capabilities: { tools: {}, resources: {} },
+        protocolVersion: SUPPORTED_PROTOCOLS.has(requested) ? requested : "2025-03-26",
+        serverInfo: { name: "ptx-isa", title: `NVIDIA PTX ISA ${ISA_VERSION} Reference`, version: SERVER_VERSION },
+        capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
+        instructions: MCP_SERVER_INSTRUCTIONS,
       });
+    }
 
     case "notifications/initialized":
+    case "notifications/cancelled":
       return "";
 
     case "ping":
@@ -401,40 +74,54 @@ function handleMcpRequest(req: {
       return rpcResult(id, { tools: MCP_TOOLS });
 
     case "tools/call": {
-      const toolName = params.name as string;
+      const toolName = String(params.name ?? "");
       const args = (params.arguments ?? {}) as Record<string, unknown>;
-      let result: object;
       switch (toolName) {
-        case "list_pages":  result = toolList(args as { filter?: string }); break;
-        case "read_page":   result = toolRead(args as { slug: string }); break;
-        case "search":      result = toolSearch(args as { query: string; max_results?: number }); break;
-        // Legacy names for backwards compat
-        case "ptx_list":    result = toolList(args as { filter?: string }); break;
-        case "ptx_read":    result = toolRead(args as { slug: string }); break;
-        case "ptx_search":  result = toolSearch(args as { query: string; max_results?: number }); break;
-        default: return rpcError(id, -32601, `Unknown tool: ${toolName}`);
+        case "search_ptx_isa":
+        case "search":
+        case "ptx_search":
+          return textResult(id, toolSearchText(args as { query: string; max_results?: number; max_bytes?: number; scope?: string }));
+        case "read_ptx_isa_page":
+        case "read_page":
+        case "ptx_read": {
+          const r = toolRead(args as { slug: string; section?: string });
+          return textResult(id, r.text, !!r.error && r.error !== "ambiguous");
+        }
+        case "lookup_ptx_instruction":
+          return textResult(id, toolLookup(args as { name: string }));
+        case "list_ptx_isa_pages":
+        case "list_pages":
+        case "ptx_list":
+          return textResult(id, toolListText(args as { filter?: string; prefix?: string }));
+        default:
+          return rpcError(id, -32602, `Unknown tool: ${toolName}`);
       }
-      return rpcResult(id, { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] });
     }
 
     case "resources/list":
       return rpcResult(id, {
         resources: ALL_DOCS.map((d) => ({
           uri: `ptx://docs/${d.slug}`,
-          name: d.title,
-          description: d.section ? `Section ${d.section}` : undefined,
+          name: d.section ? `${d.section} ${d.title}` : d.title,
+          title: d.title,
+          description: d.names.length ? `Documents: ${d.names.join(", ")}` : undefined,
           mimeType: "text/markdown",
         })),
       });
 
     case "resources/read": {
-      const uri = params.uri as string;
+      const uri = String(params.uri ?? "");
       const slug = uri.replace(/^ptx:\/\/docs\//, "");
       const entry = DOC_MAP.get(slug);
       if (!entry) return rpcError(id, -32602, `Unknown resource: ${uri}`);
-      const content = bunReadText(`${DOCS_ROOT}/${entry.path}`);
-      return rpcResult(id, { contents: [{ uri, mimeType: "text/markdown", text: content }] });
+      return rpcResult(id, { contents: [{ uri, mimeType: "text/markdown", text: entry.content }] });
     }
+
+    case "resources/templates/list":
+      return rpcResult(id, { resourceTemplates: [] });
+
+    case "prompts/list":
+      return rpcResult(id, { prompts: [] });
 
     default:
       return rpcError(id, -32601, `Method not found: ${req.method}`);
@@ -475,6 +162,25 @@ function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Resolve a relative Markdown link (../foo/bar.md#anchor) against the current page's directory. */
+function resolveHref(href: string, baseSlug: string): string {
+  if (/^(https?:|mailto:|#|\/)/i.test(href)) return href;
+  const [pathPart, hash] = href.split("#");
+  if (!pathPart) return href;
+  const baseDir = baseSlug.includes("/") ? baseSlug.slice(0, baseSlug.lastIndexOf("/")).split("/") : [];
+  const parts = [...baseDir];
+  for (const seg of pathPart.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") { parts.pop(); continue; }
+    parts.push(seg);
+  }
+  let slug = parts.join("/").replace(/\.md$/i, "");
+  if (slug.endsWith("/README")) slug = slug.slice(0, -"/README".length) + "/README";
+  return `/docs/${slug}${hash ? "#" + hash : ""}`;
+}
+
+let CURRENT_SLUG = "";
+
 function inlineHtml(raw: string): string {
   let s = escHtml(raw);
   s = s.replace(/`([^`]+)`/g, '<code class="bg-[#0d1a2d] text-cyan-300 border border-cyan-900/40 px-1.5 py-px rounded text-[0.88em] font-mono">$1</code>');
@@ -483,7 +189,8 @@ function inlineHtml(raw: string): string {
   s = s.replace(/\*(.+?)\*/g, "<em class=\"italic\">$1</em>");
   // Images before links (![alt](url) vs [text](url))
   s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="rounded-lg border border-white/[0.06] my-4 max-w-full" loading="lazy">');
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-cyan-400 hover:text-cyan-200 underline underline-offset-2 transition-colors">$1</a>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, href) =>
+    `<a href="${escHtml(resolveHref(href, CURRENT_SLUG))}" class="text-cyan-400 hover:text-cyan-200 underline underline-offset-2 transition-colors">${text}</a>`);
   return s;
 }
 
@@ -591,7 +298,7 @@ function mdToHtml(md: string): string {
       flushList(); flushTable(); flushBq();
       const lvl = hm[1].length;
       const text = hm[2].trim();
-      const id = text.toLowerCase().replace(/[^\w]+/g, "-").replace(/^-|-$/g, "");
+      const id = anchorFor(text);
       out.push(`<h${lvl} id="${id}" class="${HEADING_CLS[lvl]}">${inlineHtml(text)}</h${lvl}>`);
       continue;
     }
@@ -623,60 +330,104 @@ function mdToHtml(md: string): string {
 // Nav groups
 // ---------------------------------------------------------------------------
 
-interface NavGroup { label: string; items: DocEntry[]; }
+interface NavGroup { key: string; label: string; items: DocEntry[]; }
 
-const NAV_GROUPS: NavGroup[] = [
-  { label: "Core Chapters",               items: ALL_DOCS.filter(d => !d.path.startsWith("09-instruction-set/") && d.path !== "README.md") },
-  { label: "Chapter 9 — Instruction Set", items: ALL_DOCS.filter(d => d.path.startsWith("09-instruction-set/") && d.crumbs.length === 2) },
-  { label: "Warp-Level MMA  §9.7.14",     items: ALL_DOCS.filter(d => d.path.includes("14-warp-level-mma/")) },
-  { label: "wgmma  §9.7.15",              items: ALL_DOCS.filter(d => d.path.includes("15-wgmma/")) },
-  { label: "tcgen05  §9.7.16",            items: ALL_DOCS.filter(d => d.path.includes("16-tcgen05/")) },
-];
+/**
+ * Navigation groups are derived from the directory tree: one group per
+ * top-level chapter (files at the root are grouped as "Front matter"), and
+ * one group per sub-directory of chapter 9, 11 (the big ones).
+ */
+function groupLabel(key: string, items: DocEntry[]): string {
+  const readme = items.find(d => d.slug === `${key}/README`);
+  if (readme) return readme.section ? `§${readme.section} ${readme.title}` : readme.title;
+  const first = items.find(d => d.section);
+  const base = key.split("/").pop() ?? key;
+  const pretty = base.replace(/^\d+-/, "").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return first?.section ? `§${first.section.split(".").slice(0, 2).join(".")} ${pretty}` : pretty;
+}
+
+const NAV_GROUPS: NavGroup[] = (() => {
+  const groups = new Map<string, DocEntry[]>();
+  for (const d of ALL_DOCS) {
+    const parts = d.slug.split("/");
+    let key: string;
+    if (parts.length === 1) key = "";
+    else if (parts.length === 2) key = parts[0];
+    else key = parts.slice(0, 2).join("/");
+    groups.set(key, [...(groups.get(key) ?? []), d]);
+  }
+  const out: NavGroup[] = [];
+  for (const [key, items] of groups) {
+    out.push({ key, label: key === "" ? "Front matter & core chapters" : groupLabel(key, items), items });
+  }
+  return out;
+})();
+
+function groupForSlug(slug: string): string {
+  const parts = slug.split("/");
+  if (parts.length === 1) return "";
+  if (parts.length === 2) return parts[0];
+  return parts.slice(0, 2).join("/");
+}
 
 // ---------------------------------------------------------------------------
 // HTML shell
 // ---------------------------------------------------------------------------
 
 function shell(pageTitle: string, body: string, activeSlug = ""): string {
+  const activeGroup = activeSlug ? groupForSlug(activeSlug) : "";
   const nav = NAV_GROUPS.map(g => {
     if (!g.items.length) return "";
+    const open = g.key === activeGroup || g.key === "";
+    if (!open) {
+      // Collapsed groups render only their header (linking to the group's overview) to keep pages light.
+      const target = g.items.find(d => d.slug === `${g.key}/README`) ?? g.items[0];
+      return `<a href="/docs/${target.slug}" class="flex items-center gap-1.5 px-3 py-1 mb-1 text-[0.58rem] font-bold uppercase tracking-[0.15em] text-slate-600 hover:text-slate-300">
+        <span class="inline-block w-2 text-[0.5rem] text-slate-700">▶</span>${escHtml(g.label)}
+        <span class="ml-auto text-slate-800 tabular-nums font-mono">${g.items.length}</span>
+      </a>`;
+    }
     const links = g.items.map(d => {
       const active = d.slug === activeSlug;
       const bg = active
         ? "bg-cyan-500/10 text-cyan-300 border-l-2 border-cyan-400 pl-[10px]"
         : "text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] border-l-2 border-transparent pl-[10px]";
       const sec = d.section ? `<span class="text-slate-700 text-[0.6rem] font-mono mr-1.5 flex-shrink-0 tabular-nums">${escHtml(d.section)}</span>` : "";
-      return `<a href="/docs/${d.slug}" class="flex items-start py-[4px] pr-3 text-[0.8rem] leading-snug transition-all duration-150 ${bg}">${sec}<span>${escHtml(d.title)}</span></a>`;
+      const label = d.slug.endsWith("/README") ? "Overview" : d.title;
+      return `<a href="/docs/${d.slug}" class="flex items-start py-[4px] pr-3 text-[0.8rem] leading-snug transition-all duration-150 ${bg}">${sec}<span>${escHtml(label)}</span></a>`;
     }).join("\n");
-    return `<div class="mb-5">
-      <p class="px-3 mb-1.5 text-[0.58rem] font-bold uppercase tracking-[0.15em] text-slate-600">${escHtml(g.label)}</p>
+    return `<details class="mb-2 group" ${open ? "open" : ""}>
+      <summary class="cursor-pointer select-none px-3 py-1 text-[0.58rem] font-bold uppercase tracking-[0.15em] text-slate-600 hover:text-slate-300 list-none flex items-center gap-1.5">
+        <span class="inline-block w-2 text-[0.5rem] text-slate-700 transition-transform group-open:rotate-90">▶</span>${escHtml(g.label)}
+        <span class="ml-auto text-slate-800 tabular-nums font-mono">${g.items.length}</span>
+      </summary>
       ${links}
-    </div>`;
+    </details>`;
   }).join("\n");
 
   const BASE_URL = "https://ptx.poole.ai";
   const canonicalUrl = activeSlug ? `${BASE_URL}/docs/${activeSlug}` : BASE_URL;
   const ogType = activeSlug ? "article" : "website";
   const description = activeSlug
-    ? `PTX ISA v9.2 reference: ${escHtml(pageTitle)}. Community Markdown conversion of the NVIDIA Parallel Thread Execution ISA specification.`
-    : "Community Markdown reference for the NVIDIA PTX ISA v9.2 — full instruction set including warp-level MMA, wgmma (Hopper), and TensorCore Gen5 tcgen05 (Blackwell).";
+    ? `PTX ISA v9.4 reference: ${escHtml(pageTitle)}. Community Markdown conversion of the NVIDIA Parallel Thread Execution ISA specification.`
+    : "Community Markdown reference for the NVIDIA PTX ISA v9.4 — complete instruction set (mma, wgmma, tcgen05, fabric), special registers, directives and release notes.";
   const twitterDesc = activeSlug
-    ? `PTX ISA v9.2 reference: ${escHtml(pageTitle)}.`
-    : "Community Markdown reference for the NVIDIA PTX ISA v9.2 — warp-level MMA, wgmma, tcgen05, and more.";
+    ? `PTX ISA v9.4 reference: ${escHtml(pageTitle)}.`
+    : "Community Markdown reference for the NVIDIA PTX ISA v9.4 — warp-level MMA, wgmma, tcgen05, and more.";
 
   return `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${escHtml(pageTitle)} — PTX ISA v9.2</title>
+  <title>${escHtml(pageTitle)} — PTX ISA v9.4</title>
   <meta name="description" content="${description}">
   <meta name="theme-color" content="#070d1a">
 
   <!-- Open Graph -->
   <meta property="og:type" content="${ogType}">
-  <meta property="og:site_name" content="PTX ISA v9.2 Reference">
-  <meta property="og:title" content="${escHtml(pageTitle)} — PTX ISA v9.2">
+  <meta property="og:site_name" content="PTX ISA v9.4 Reference">
+  <meta property="og:title" content="${escHtml(pageTitle)} — PTX ISA v9.4">
   <meta property="og:description" content="${description}">
   <meta property="og:url" content="${canonicalUrl}">
   <meta property="og:image" content="${BASE_URL}/og-image.png">
@@ -685,7 +436,7 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
 
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="${escHtml(pageTitle)} — PTX ISA v9.2">
+  <meta name="twitter:title" content="${escHtml(pageTitle)} — PTX ISA v9.4">
   <meta name="twitter:description" content="${twitterDesc}">
   <meta name="twitter:image" content="${BASE_URL}/og-image.png">
 
@@ -900,7 +651,7 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
     </button>
     <a href="/" class="flex items-baseline gap-1.5">
       <span class="text-white font-bold text-sm tracking-tight">PTX ISA</span>
-      <span class="text-cyan-400 font-bold text-sm">v9.2</span>
+      <span class="text-cyan-400 font-bold text-sm">v9.4</span>
     </a>
     <div class="flex-1"></div>
     <button onclick="openSearch()" aria-label="Search" class="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors">
@@ -916,7 +667,7 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
     <div class="flex-shrink-0 px-5 py-5 border-b border-white/[0.06] flex items-center justify-between">
       <a href="/" class="block group">
         <div class="text-[0.58rem] font-bold uppercase tracking-[0.18em] text-slate-600 mb-1">NVIDIA</div>
-        <div class="text-white font-bold text-[0.95rem] tracking-tight leading-none group-hover:text-cyan-300 transition-colors">PTX ISA <span class="text-cyan-400">v9.2</span></div>
+        <div class="text-white font-bold text-[0.95rem] tracking-tight leading-none group-hover:text-cyan-300 transition-colors">PTX ISA <span class="text-cyan-400">v9.4</span></div>
         <div class="text-[0.6rem] text-slate-600 mt-1 uppercase tracking-widest">Reference</div>
       </a>
       <button onclick="closeSidebar()" class="md:hidden p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors -mr-2" aria-label="Close menu">
@@ -1148,11 +899,14 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
         const sectionBadge = r.section
           ? '<span class="search-result-section">&sect;' + escH(r.section) + '</span>'
           : '';
-        const snippet = r.snippets && r.snippets.length > 0
-          ? '<div class="search-result-snippet">' + highlightText(r.snippets[0].text, q) + '</div>'
+        const title = r.heading && r.heading !== r.page_title
+          ? escH(r.page_title) + ' <span style="opacity:.55">&rsaquo;</span> ' + highlightText(r.heading.replace(/^[\\d.]+\\s+/, ''), q)
+          : highlightText(r.page_title, q);
+        const snippet = r.snippet
+          ? '<div class="search-result-snippet">' + escH(r.snippet).replace(/«/g, '<mark>').replace(/»/g, '</mark>') + '</div>'
           : '';
-        html += '<a href="/docs/' + escH(r.slug) + '" class="search-result-item" onclick="closeSearch()">'
-          + '<div class="search-result-title">' + highlightText(r.title, q) + sectionBadge + '</div>'
+        html += '<a href="' + escH(r.url) + '" class="search-result-item" onclick="closeSearch()">'
+          + '<div class="search-result-title">' + title + sectionBadge + '</div>'
           + snippet
           + '</a>';
       }
@@ -1176,18 +930,38 @@ function shell(pageTitle: string, body: string, activeSlug = ""): string {
 // ---------------------------------------------------------------------------
 
 function renderIndex(): string {
-  const cards = NAV_GROUPS.map(g => {
-    if (!g.items.length) return "";
-    const grid = g.items.map(d => `
-      <a href="/docs/${d.slug}" class="doc-card block p-4 rounded-lg">
-        ${d.section ? `<div class="section-label mb-1.5">${escHtml(d.section)}</div>` : ""}
-        <div class="text-[0.88rem] text-slate-300 group-hover:text-white font-medium leading-snug">${escHtml(d.title)}</div>
+  // One section per top-level chapter; chapter 9 and 11 get one card per sub-directory.
+  const chapters = new Map<string, NavGroup[]>();
+  for (const g of NAV_GROUPS) {
+    const top = g.key === "" ? "" : g.key.split("/")[0];
+    chapters.set(top, [...(chapters.get(top) ?? []), g]);
+  }
+  const cards = [...chapters.entries()].map(([top, groups]) => {
+    const items: Array<{ slug: string; section: string | null; title: string; count: number }> = [];
+    for (const g of groups) {
+      if (g.key === "") {
+        for (const d of g.items) items.push({ slug: d.slug, section: d.section, title: d.title, count: 1 });
+      } else if (g.key === top) {
+        // Chapter directory itself: its README plus direct pages
+        for (const d of g.items) items.push({ slug: d.slug, section: d.section, title: d.slug.endsWith("/README") ? `${d.title} — overview` : d.title, count: 1 });
+      } else {
+        const readme = g.items.find(d => d.slug === `${g.key}/README`) ?? g.items[0];
+        items.push({ slug: readme.slug, section: readme.section, title: readme.title, count: g.items.length });
+      }
+    }
+    const topReadme = ALL_DOCS.find(d => d.slug === `${top}/README`);
+    const label = top === "" ? "Front matter & core chapters" : topReadme ? `§${topReadme.section ?? ""} ${topReadme.title}` : top;
+    const grid = items.map(it => `
+      <a href="/docs/${it.slug}" class="doc-card block p-4 rounded-lg">
+        <div class="flex items-center justify-between mb-1.5">${it.section ? `<span class="section-label">${escHtml(it.section)}</span>` : "<span></span>"}${it.count > 1 ? `<span class="text-[0.6rem] text-slate-700 tabular-nums font-mono">${it.count} pages</span>` : ""}</div>
+        <div class="text-[0.88rem] text-slate-300 group-hover:text-white font-medium leading-snug">${escHtml(it.title)}</div>
       </a>`).join("\n");
+    const total = groups.reduce((n, g) => n + g.items.length, 0);
     return `<section class="mb-10">
       <div class="flex items-center gap-3 mb-3">
-        <h2 class="section-label">${escHtml(g.label)}</h2>
+        <h2 class="section-label">${escHtml(label)}</h2>
         <div class="flex-1 h-px bg-white/[0.05]"></div>
-        <span class="text-[0.6rem] text-slate-700 tabular-nums">${g.items.length}</span>
+        <span class="text-[0.6rem] text-slate-700 tabular-nums">${total}</span>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">${grid}</div>
     </section>`;
@@ -1197,11 +971,11 @@ function renderIndex(): string {
     <header class="mb-10">
       <div class="text-[0.6rem] font-bold uppercase tracking-[0.2em] text-cyan-700 mb-3">NVIDIA / PTX ISA</div>
       <h1 class="text-[1.5rem] sm:text-[2.2rem] font-bold text-white tracking-tight leading-none mb-1">
-        PTX ISA <span class="text-cyan-400">v9.2</span>
+        PTX ISA <span class="text-cyan-400">v9.4</span>
       </h1>
       <div class="text-[0.6rem] uppercase tracking-[0.15em] text-slate-600 mb-5">Parallel Thread Execution Instruction Set Architecture</div>
       <p class="text-slate-500 text-sm max-w-xl leading-relaxed">
-        Community Markdown reference — ${ALL_DOCS.length} pages covering the full PTX instruction set including warp-level MMA, wgmma (Hopper), and TensorCore Gen5 tcgen05 (Blackwell).
+        Community Markdown reference — ${ALL_DOCS.length} pages covering the complete PTX ISA v9.4: every instruction (mma, wgmma, tcgen05, fabric), special registers, directives, pragmas and release notes.
       </p>
     </header>
 
@@ -1270,7 +1044,7 @@ function renderIndex(): string {
           <div class="relative">
             <button onclick="copyCode('code-local')" class="absolute top-2.5 right-3 text-[0.62rem] text-slate-600 hover:text-slate-300 font-mono transition-colors">copy</button>
             <pre id="code-local" class="bg-[#060d1a] border border-cyan-900/30 rounded-lg px-5 py-4 text-[0.84rem] font-mono text-cyan-200 leading-relaxed overflow-x-auto">cd mcp-server
-bun install &amp;&amp; bun run sync-docs
+bun install
 bun run start   # http://localhost:3000
 
 # MCP config:
@@ -1287,18 +1061,22 @@ bun run start   # http://localhost:3000
       </div>
 
       <!-- Tools reference -->
-      <div class="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
         <div class="doc-card rounded-lg p-3.5">
-          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">list_pages</div>
-          <div class="text-slate-500 text-[0.78rem] leading-snug">List all pages, optionally filtered by keyword</div>
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">search_ptx_isa</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">Section-level BM25 search with PTX-aware tokens and hotspot snippets, under 4&nbsp;KiB per call</div>
         </div>
         <div class="doc-card rounded-lg p-3.5">
-          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">read_page</div>
-          <div class="text-slate-500 text-[0.78rem] leading-snug">Read a page&apos;s full Markdown by slug</div>
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">read_ptx_isa_page</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">Read a page, or one section of it, by slug, mnemonic or section number</div>
         </div>
         <div class="doc-card rounded-lg p-3.5">
-          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">search</div>
-          <div class="text-slate-500 text-[0.78rem] leading-snug">Relevance-ranked full-text search with contextual snippets</div>
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">lookup_ptx_instruction</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">Resolve an instruction, directive or register name to its page(s)</div>
+        </div>
+        <div class="doc-card rounded-lg p-3.5">
+          <div class="text-cyan-400 font-mono text-[0.75rem] font-semibold mb-1">list_ptx_isa_pages</div>
+          <div class="text-slate-500 text-[0.78rem] leading-snug">Outline of chapters, or every page under a directory prefix</div>
         </div>
       </div>
     </section>
@@ -1342,8 +1120,8 @@ function renderDoc(slug: string): Response {
   const entry = DOC_MAP.get(slug);
   if (!entry) return new Response("Not found", { status: 404 });
 
-  const raw = bunReadText(`${DOCS_ROOT}/${entry.path}`);
-  const html = mdToHtml(raw);
+  CURRENT_SLUG = slug;
+  const html = mdToHtml(entry.content);
 
   const breadcrumb = entry.crumbs.map((part, i) => {
     if (i === entry.crumbs.length - 1)
@@ -1380,21 +1158,35 @@ router.get("/docs/*", (req) => {
 
 // REST API
 router.get("/api/list", (req) => {
-  const filter = new URL(req.url).searchParams.get("filter") ?? undefined;
-  return json(toolList({ filter }));
+  const url = new URL(req.url);
+  const filter = url.searchParams.get("filter") ?? undefined;
+  const prefix = url.searchParams.get("prefix") ?? undefined;
+  return json(toolListJson({ filter, prefix }));
 });
 
 router.get("/api/read", (req) => {
-  const slug = new URL(req.url).searchParams.get("slug") ?? "";
-  return json(toolRead({ slug }));
+  const url = new URL(req.url);
+  const slug = url.searchParams.get("slug") ?? "";
+  const section = url.searchParams.get("section") ?? undefined;
+  const r = toolRead({ slug, section });
+  if (r.error && r.error !== "ambiguous") return json({ error: r.error, message: r.text }, { status: 404 });
+  if (r.error === "ambiguous") return json({ error: r.error, message: r.text }, { status: 300 });
+  return json({ slug: r.slug, content: r.text });
+});
+
+router.get("/api/lookup", (req) => {
+  const name = new URL(req.url).searchParams.get("name") ?? "";
+  if (!name) return json({ error: "name parameter required" }, { status: 400 });
+  return json({ name, result: toolLookup({ name }) });
 });
 
 router.get("/api/search", (req) => {
   const url = new URL(req.url);
   const query = url.searchParams.get("q") ?? "";
-  const max_results = parseInt(url.searchParams.get("max") ?? "20", 10);
+  const max_results = parseInt(url.searchParams.get("max") ?? "10", 10);
+  const scope = url.searchParams.get("scope") ?? undefined;
   if (!query) return json({ error: "q parameter required" }, { status: 400 });
-  return json(toolSearch({ query, max_results }));
+  return json(toolSearchJson({ query, max_results, scope }));
 });
 
 // Static assets
@@ -1426,9 +1218,9 @@ router.get("/raw/*", (req) => {
   const raw = new URL(req.url).pathname.replace(/^\/raw\//, "");
   const slug = safeSlug(raw);
   if (!slug) return new Response("Invalid path", { status: 400 });
-  const result = toolRead({ slug }) as Record<string, unknown>;
-  if (result.error) return new Response(result.error as string, { status: 404 });
-  return new Response(result.content as string, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+  const entry = DOC_MAP.get(slug);
+  if (!entry) return new Response("Not found", { status: 404 });
+  return new Response(entry.content, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
 });
 
 // MCP over HTTP — streamable HTTP transport (MCP spec 2024-11-05)
@@ -1481,8 +1273,13 @@ router.all("*", () => error(404, "Not found"));
 // Entry point
 // ---------------------------------------------------------------------------
 
-Bun.serve({ port: HTTP_PORT, fetch: router.fetch });
-console.error(`[ptx-isa] http://localhost:${HTTP_PORT}`);
+try {
+  Bun.serve({ port: HTTP_PORT, fetch: router.fetch });
+  console.error(`[ptx-isa] http://localhost:${HTTP_PORT}`);
+} catch (e) {
+  // A stdio MCP client must keep working even if the HTTP port is already taken.
+  console.error(`[ptx-isa] HTTP server not started on port ${HTTP_PORT}: ${(e as Error).message}`);
+}
 
 // Stdio MCP transport — skip on Railway or when --http flag is passed
 const httpOnly = process.argv.includes("--http") || !!process.env.PORT;

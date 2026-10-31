@@ -1,0 +1,82 @@
+# 9.7.5.1. Mixed Precision Floating Point Instructions: add
+
+**add**
+
+Add 2 values.
+
+## Syntax
+
+```ptx
+add{.rnd}{.sat}.cdtype.atype  d, a, c;
+
+add{.rnd}.dtype2.atype2.ctype2   d, a, c;
+add.rz.ftz.dtype3.atype3.ctype2  d, a, c;
+add.rz.dtype4.atype3.ctype2      d, a, c;
+
+.atype = { .f16, .bf16 };
+.cdtype = { .f32 };
+.atype2 = { .f16x2, .bf16x2 };
+.dtype2 = .ctype2 = .atype3 = { .f32x2 };
+.dtype3 = { .f16x2 };
+.dtype4 = { .bf16x2 };
+.rnd   = { .rn, .rz, .rm, .rp };
+```
+
+## Description
+
+Converts input operands, with performing addition, `a` and `c` to `cdtype`/`dtype`. The resulting value is stored in the destination operand `d`.
+
+## Semantics
+
+```ptx
+if (cdtype == .f32) {  // atype = .f16/.bf16, upconvert
+    d = convert(a) + c;
+} else if (dtype = .f32x2) {  // atype = .f16x2/.bf16x2, upconvert
+    d[0:31] = convert(a[0:15]) + c[0:31];
+    d[32:63] = convert(a[16:31]) + c[32:63];
+} else if (dtype == .f16x2 || dtype == .bf16x2) { // atype = ctype = .f32x2, downconvert
+    d[0:15] = convert(a[0:31] + c[0:31]);  // Apply rz for output
+    d[16:31] = convert(a[32:63] + c[32:63]);  // Apply rz for output
+}
+```
+
+## Notes
+
+Rounding modifiers:
+
+- `.rn` — mantissa LSB rounds to nearest even
+- `.rz` — mantissa LSB rounds towards zero
+- `.rm` — mantissa LSB rounds towards negative infinity
+- `.rp` — mantissa LSB rounds towards positive infinity
+
+The default value of rounding modifier is `.rn`. Note that an `add` instruction with an explicit rounding modifier is treated conservatively by the code optimizer. An `add` instruction with no rounding modifier defaults to round-to-nearest-even and may be optimized aggressively by the code optimizer. In particular, `mul`/`add` sequences with no rounding modifiers may be optimized to use fused-multiply-add instructions on the target device.
+
+Subnormal numbers:
+
+- By default, subnormal numbers are supported.
+
+Saturation modifier:
+
+- `add.sat` clamps the result to [0.0, 1.0]. NaN results are flushed to +0.0f.
+
+## PTX ISA Notes
+
+`add.f32.{f16/bf16}` introduced in PTX ISA version 8.6.
+
+`add` with `.f16x2`/`.bf16x2`/`.f32x2` types introduced in PTX ISA version 9.4.
+
+## Target ISA Notes
+
+`add.f32.{f16/bf16}` requires `sm_100` or higher.
+
+`add` with `.f16x2`/`.bf16x2`/`.f32x2` types is supported on following family-specific architectures:
+
+- `sm_107f` or higher in the same family
+
+## Examples
+
+```ptx
+.reg .f32 fc, fd;
+.reg .b16 ba;
+add.rz.f32.bf16.sat   fd, fa, fc;
+```

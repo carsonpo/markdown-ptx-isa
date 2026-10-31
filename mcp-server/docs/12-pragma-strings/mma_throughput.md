@@ -1,0 +1,38 @@
+# 12.5. Pragma Strings: "mma_throughput"
+
+**"mma_throughput"**
+
+Enable compiler loop optimizations for `mma` operations.
+
+## Syntax
+
+```ptx
+.pragma "mma_throughput";
+```
+
+## Description
+
+The `"mma_throughput"` pragma is a directive to enable loop optimizations in compiler for `mma` operations.
+
+This pragma is only allowed at entry-function scope. Compiler optimizations are enabled for the entry function specifying the pragma.
+
+## PTX ISA Notes
+
+Introduced in PTX ISA version 9.3.
+
+## Target ISA Notes
+
+Supported on all target architectures.
+
+## Examples
+
+```ptx
+.entry test_kernel()
+{
+    ....
+    ....
+    .pragma "mma_throughput";
+    ....
+    ....
+}
+```

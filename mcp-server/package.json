@@ -1,8 +1,8 @@
 {
   "name": "ptx-isa-mcp-server",
-  "version": "1.0.0",
-  "description": "MCP server for NVIDIA PTX ISA v9.2 documentation",
-  "module": "index.ts",
+  "version": "3.0.0",
+  "description": "MCP server, REST API and documentation browser for the NVIDIA PTX ISA v9.4 Markdown reference",
+  "module": "server.ts",
   "type": "module",
   "scripts": {
     "start": "bun run server.ts",

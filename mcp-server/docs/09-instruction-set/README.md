@@ -73,55 +73,55 @@ The signed integer comparisons are the traditional `eq` (equal), `ne` (not-equal
 
 Table 22 shows the operators for signed integer, unsigned integer, and bit-size types.
 
-**Table 22. Operators for Signed Integer, Unsigned Integer, and Bit-Size Types**
+**Table 22** Operators for Signed Integer, Unsigned Integer, and Bit-Size Types
 
 | Meaning | Signed Operator | Unsigned Operator | Bit-Size Operator |
 |---------|-----------------|-------------------|-------------------|
-| a == b  | eq              | eq                | eq                |
-| a != b  | ne              | ne                | ne                |
-| a < b   | lt              | lo                | n/a               |
-| a <= b  | le              | ls                | n/a               |
-| a > b   | gt              | hi                | n/a               |
-| a >= b  | ge              | hs                | n/a               |
+| `a == b` | `eq` | `eq` | `eq` |
+| `a != b` | `ne` | `ne` | `ne` |
+| `a < b` | `lt` | `lo` | n/a |
+| `a <= b` | `le` | `ls` | n/a |
+| `a > b` | `gt` | `hi` | n/a |
+| `a >= b` | `ge` | `hs` | n/a |
 
 #### 9.3.1.2. Floating Point Comparisons
 
 The ordered floating-point comparisons are `eq`, `ne`, `lt`, `le`, `gt`, and `ge`. If either operand is NaN, the result is False. Table 23 lists the floating-point comparison operators.
 
-**Table 23. Floating-Point Comparison Operators**
+**Table 23** Floating-Point Comparison Operators
 
-| Meaning                                   | Floating-Point Operator |
-|-------------------------------------------|-------------------------|
-| a == b && !isNaN(a) && !isNaN(b)          | eq                      |
-| a != b && !isNaN(a) && !isNaN(b)          | ne                      |
-| a < b && !isNaN(a) && !isNaN(b)           | lt                      |
-| a <= b && !isNaN(a) && !isNaN(b)          | le                      |
-| a > b && !isNaN(a) && !isNaN(b)           | gt                      |
-| a >= b && !isNaN(a) && !isNaN(b)          | ge                      |
+| Meaning | Floating-Point Operator |
+|---------|-------------------------|
+| `a == b && !isNaN(a) && !isNaN(b)` | `eq` |
+| `a != b && !isNaN(a) && !isNaN(b)` | `ne` |
+| `a < b && !isNaN(a) && !isNaN(b)` | `lt` |
+| `a <= b && !isNaN(a) && !isNaN(b)` | `le` |
+| `a > b && !isNaN(a) && !isNaN(b)` | `gt` |
+| `a >= b && !isNaN(a) && !isNaN(b)` | `ge` |
 
 To aid comparison operations in the presence of NaN values, unordered floating-point comparisons are provided: `equ`, `neu`, `ltu`, `leu`, `gtu`, and `geu`. If both operands are numeric values (not NaN), then the comparison has the same result as its ordered counterpart. If either operand is NaN, then the result of the comparison is True.
 
 Table 24 lists the floating-point comparison operators accepting NaN values.
 
-**Table 24. Floating-Point Comparison Operators Accepting NaN**
+**Table 24** Floating-Point Comparison Operators Accepting NaN
 
-| Meaning                                | Floating-Point Operator |
-|----------------------------------------|-------------------------|
-| a == b \|\| isNaN(a) \|\| isNaN(b)    | equ                     |
-| a != b \|\| isNaN(a) \|\| isNaN(b)    | neu                     |
-| a < b \|\| isNaN(a) \|\| isNaN(b)     | ltu                     |
-| a <= b \|\| isNaN(a) \|\| isNaN(b)    | leu                     |
-| a > b \|\| isNaN(a) \|\| isNaN(b)     | gtu                     |
-| a >= b \|\| isNaN(a) \|\| isNaN(b)    | geu                     |
+| Meaning | Floating-Point Operator |
+|---------|-------------------------|
+| `a == b \|\| isNaN(a) \|\| isNaN(b)` | `equ` |
+| `a != b \|\| isNaN(a) \|\| isNaN(b)` | `neu` |
+| `a < b \|\| isNaN(a) \|\| isNaN(b)` | `ltu` |
+| `a <= b \|\| isNaN(a) \|\| isNaN(b)` | `leu` |
+| `a > b \|\| isNaN(a) \|\| isNaN(b)` | `gtu` |
+| `a >= b \|\| isNaN(a) \|\| isNaN(b)` | `geu` |
 
 To test for NaN values, two operators `num` (numeric) and `nan` (isNaN) are provided. `num` returns True if both operands are numeric values (not NaN), and `nan` returns True if either operand is NaN. Table 25 lists the floating-point comparison operators testing for NaN values.
 
-**Table 25. Floating-Point Comparison Operators Testing for NaN**
+**Table 25** Floating-Point Comparison Operators Testing for NaN
 
-| Meaning                         | Floating-Point Operator |
-|---------------------------------|-------------------------|
-| !isNaN(a) && !isNaN(b)          | num                     |
-| isNaN(a) \|\| isNaN(b)          | nan                     |
+| Meaning | Floating-Point Operator |
+|---------|-------------------------|
+| `!isNaN(a) && !isNaN(b)` | `num` |
+| `isNaN(a) \|\| isNaN(b)` | `nan` |
 
 ### 9.3.2. Manipulating Predicates
 
@@ -162,14 +162,14 @@ In general, an operand's type must agree with the corresponding instruction-type
 
 Table 26 summarizes these type checking rules.
 
-**Table 26. Type Checking Rules**
+**Table 26** Type Checking Rules
 
-| Operand Type \ Instruction Type | .bX   | .sX   | .uX   | .fX     |
-|---------------------------------|-------|-------|-------|---------|
-| .bX                             | okay  | okay  | okay  | okay    |
-| .sX                             | okay  | okay  | okay  | invalid |
-| .uX                             | okay  | okay  | okay  | invalid |
-| .fX                             | okay  | invalid | invalid | okay  |
+| Instruction Type \ Operand Type | `.bX` | `.sX` | `.uX` | `.fX` |
+|---------------------------------|-------|-------|-------|-------|
+| `.bX` | okay | okay | okay | okay |
+| `.sX` | okay | okay | okay | invalid |
+| `.uX` | okay | okay | okay | invalid |
+| `.fX` | okay | invalid | invalid | okay |
 
 > **Note:** Some operands have their type and size defined independently from the instruction type-size. For example, the shift amount operand for left and right shift instructions always has type `.u32`, while the remaining operands have their type and size determined by the instruction type.
 
@@ -188,30 +188,31 @@ When a source operand has a size that exceeds the instruction-type size, the sou
 
 Table 27 summarizes the relaxed type-checking rules for source operands. Note that some combinations may still be invalid for a particular instruction; for example, the `cvt` instruction does not support `.bX` instruction types, so those rows are invalid for `cvt`.
 
-**Table 27. Relaxed Type-checking Rules for Source Operands**
+**Table 27** Relaxed Type-checking Rules for Source Operands
 
-| Instruction Type \ Source Operand Type | b8 | b16  | b32  | b64  | b128 | s8 | s16  | s32  | s64  | u8 | u16  | u32  | u64  | f16  | f32  | f64  |
-|----------------------------------------|----|------|------|------|------|----|------|------|------|----|------|------|------|------|------|------|
-| b8                                     | –  | chop | chop | chop | chop | –  | chop | chop | chop | –  | chop | chop | chop | chop | chop | chop |
-| b16                                    | inv| –    | chop | chop | chop | inv| –    | chop | chop | inv| –    | chop | chop | –    | chop | chop |
-| b32                                    | inv| inv  | –    | chop | chop | inv| inv  | –    | chop | inv| inv  | –    | chop | inv  | –    | chop |
-| b64                                    | inv| inv  | inv  | –    | chop | inv| inv  | inv  | –    | inv| inv  | inv  | –    | inv  | inv  | –    |
-| b128                                   | inv| inv  | inv  | inv  | –    | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | inv  | inv  | inv  |
-| s8                                     | –  | chop | chop | chop | chop | –  | chop | chop | chop | –  | chop | chop | chop | inv  | inv  | inv  |
-| s16                                    | inv| –    | chop | chop | chop | inv| –    | chop | chop | inv| –    | chop | chop | inv  | inv  | inv  |
-| s32                                    | inv| inv  | –    | chop | chop | inv| inv  | –    | chop | inv| inv  | –    | chop | inv  | inv  | inv  |
-| s64                                    | inv| inv  | inv  | –    | chop | inv| inv  | inv  | –    | inv| inv  | inv  | –    | inv  | inv  | inv  |
-| u8                                     | –  | chop | chop | chop | chop | –  | chop | chop | chop | –  | chop | chop | chop | inv  | inv  | inv  |
-| u16                                    | inv| –    | chop | chop | chop | inv| –    | chop | chop | inv| –    | chop | chop | inv  | inv  | inv  |
-| u32                                    | inv| inv  | –    | chop | chop | inv| inv  | –    | chop | inv| inv  | –    | chop | inv  | inv  | inv  |
-| u64                                    | inv| inv  | inv  | –    | chop | inv| inv  | inv  | –    | inv| inv  | inv  | –    | inv  | inv  | inv  |
-| f16                                    | inv| –    | chop | chop | chop | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | –    | inv  | inv  |
-| f32                                    | inv| inv  | –    | chop | chop | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | inv  | –    | inv  |
-| f64                                    | inv| inv  | inv  | –    | chop | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | inv  | inv  | –    |
+| Instruction Type \ Source Operand Type | `b8` | `b16` | `b32` | `b64` | `b128` | `s8` | `s16` | `s32` | `s64` | `u8` | `u16` | `u32` | `u64` | `f16` | `f32` | `f64` |
+|----------------------------------------|------|-------|-------|-------|--------|------|-------|-------|-------|------|-------|-------|-------|-------|-------|-------|
+| `b8` | – | chop | chop | chop | chop | – | chop | chop | chop | – | chop | chop | chop | chop | chop | chop |
+| `b16` | inv | – | chop | chop | chop | inv | – | chop | chop | inv | – | chop | chop | – | chop | chop |
+| `b32` | inv | inv | – | chop | chop | inv | inv | – | chop | inv | inv | – | chop | inv | – | chop |
+| `b64` | inv | inv | inv | – | chop | inv | inv | inv | – | inv | inv | inv | – | inv | inv | – |
+| `b128` | inv | inv | inv | inv | – | inv | inv | inv | inv | inv | inv | inv | inv | inv | inv | inv |
+| `s8` | – | chop | chop | chop | chop | – | chop | chop | chop | – | chop | chop | chop | inv | inv | inv |
+| `s16` | inv | – | chop | chop | chop | inv | – | chop | chop | inv | – | chop | chop | inv | inv | inv |
+| `s32` | inv | inv | – | chop | chop | inv | inv | – | chop | inv | inv | – | chop | inv | inv | inv |
+| `s64` | inv | inv | inv | – | chop | inv | inv | inv | – | inv | inv | inv | – | inv | inv | inv |
+| `u8` | – | chop | chop | chop | chop | – | chop | chop | chop | – | chop | chop | chop | inv | inv | inv |
+| `u16` | inv | – | chop | chop | chop | inv | – | chop | chop | inv | – | chop | chop | inv | inv | inv |
+| `u32` | inv | inv | – | chop | chop | inv | inv | – | chop | inv | inv | – | chop | inv | inv | inv |
+| `u64` | inv | inv | inv | – | chop | inv | inv | inv | – | inv | inv | inv | – | inv | inv | inv |
+| `f16` | inv | – | chop | chop | chop | inv | inv | inv | inv | inv | inv | inv | inv | – | inv | inv |
+| `f32` | inv | inv | – | chop | chop | inv | inv | inv | inv | inv | inv | inv | inv | inv | – | inv |
+| `f64` | inv | inv | inv | – | chop | inv | inv | inv | inv | inv | inv | inv | inv | inv | inv | – |
 
 **Notes**
 
-- chop = keep only low bits that fit; "–" = allowed, but no conversion needed; inv = invalid, parse error.
+chop = keep only low bits that fit; "–" = allowed, but no conversion needed; inv = invalid, parse error.
+
 - Source register size must be of equal or greater size than the instruction-type size.
 - Bit-size source registers may be used with any appropriately-sized instruction type. The data are truncated ("chopped") to the instruction-type size and interpreted according to the instruction type.
 - Integer source registers may be used with any appropriately-sized bit-size or integer instruction type. The data are truncated to the instruction-type size and interpreted according to the instruction type.
@@ -221,30 +222,31 @@ When a destination operand has a size that exceeds the instruction-type size, th
 
 Table 28 summarizes the relaxed type-checking rules for destination operands.
 
-**Table 28. Relaxed Type-checking Rules for Destination Operands**
+**Table 28** Relaxed Type-checking Rules for Destination Operands
 
-| Instruction Type \ Destination Operand Type | b8 | b16  | b32  | b64  | b128 | s8 | s16  | s32  | s64  | u8 | u16  | u32  | u64  | f16  | f32  | f64  |
-|---------------------------------------------|----|------|------|------|------|----|------|------|------|----|------|------|------|------|------|------|
-| b8                                          | –  | zext | zext | zext | zext | –  | zext | zext | zext | –  | zext | zext | zext | zext | zext | zext |
-| b16                                         | inv| –    | zext | zext | zext | inv| –    | zext | zext | inv| –    | zext | zext | –    | zext | zext |
-| b32                                         | inv| inv  | –    | zext | zext | inv| inv  | –    | zext | inv| inv  | –    | zext | inv  | –    | zext |
-| b64                                         | inv| inv  | inv  | –    | zext | inv| inv  | inv  | –    | inv| inv  | inv  | –    | inv  | inv  | –    |
-| b128                                        | inv| inv  | inv  | inv  | –    | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | inv  | inv  | inv  |
-| s8                                          | –  | sext | sext | sext | sext | –  | sext | sext | sext | –  | sext | sext | sext | inv  | inv  | inv  |
-| s16                                         | inv| –    | sext | sext | sext | inv| –    | sext | sext | inv| –    | sext | sext | inv  | inv  | inv  |
-| s32                                         | inv| inv  | –    | sext | sext | inv| inv  | –    | sext | inv| inv  | –    | sext | inv  | inv  | inv  |
-| s64                                         | inv| inv  | inv  | –    | sext | inv| inv  | inv  | –    | inv| inv  | inv  | –    | inv  | inv  | inv  |
-| u8                                          | –  | zext | zext | zext | zext | –  | zext | zext | zext | –  | zext | zext | zext | inv  | inv  | inv  |
-| u16                                         | inv| –    | zext | zext | zext | inv| –    | zext | zext | inv| –    | zext | zext | inv  | inv  | inv  |
-| u32                                         | inv| inv  | –    | zext | zext | inv| inv  | –    | zext | inv| inv  | –    | zext | inv  | inv  | inv  |
-| u64                                         | inv| inv  | inv  | –    | zext | inv| inv  | inv  | –    | inv| inv  | inv  | –    | inv  | inv  | inv  |
-| f16                                         | inv| –    | zext | zext | zext | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | –    | inv  | inv  |
-| f32                                         | inv| inv  | –    | zext | zext | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | inv  | –    | inv  |
-| f64                                         | inv| inv  | inv  | –    | zext | inv| inv  | inv  | inv  | inv| inv  | inv  | inv  | inv  | inv  | –    |
+| Instruction Type \ Destination Operand Type | `b8` | `b16` | `b32` | `b64` | `b128` | `s8` | `s16` | `s32` | `s64` | `u8` | `u16` | `u32` | `u64` | `f16` | `f32` | `f64` |
+|---------------------------------------------|------|-------|-------|-------|--------|------|-------|-------|-------|------|-------|-------|-------|-------|-------|-------|
+| `b8` | – | zext | zext | zext | zext | – | zext | zext | zext | – | zext | zext | zext | zext | zext | zext |
+| `b16` | inv | – | zext | zext | zext | inv | – | zext | zext | inv | – | zext | zext | – | zext | zext |
+| `b32` | inv | inv | – | zext | zext | inv | inv | – | zext | inv | inv | – | zext | inv | – | zext |
+| `b64` | inv | inv | inv | – | zext | inv | inv | inv | – | inv | inv | inv | – | inv | inv | – |
+| `b128` | inv | inv | inv | inv | – | inv | inv | inv | inv | inv | inv | inv | inv | inv | inv | inv |
+| `s8` | – | sext | sext | sext | sext | – | sext | sext | sext | – | sext | sext | sext | inv | inv | inv |
+| `s16` | inv | – | sext | sext | sext | inv | – | sext | sext | inv | – | sext | sext | inv | inv | inv |
+| `s32` | inv | inv | – | sext | sext | inv | inv | – | sext | inv | inv | – | sext | inv | inv | inv |
+| `s64` | inv | inv | inv | – | sext | inv | inv | inv | – | inv | inv | inv | – | inv | inv | inv |
+| `u8` | – | zext | zext | zext | zext | – | zext | zext | zext | – | zext | zext | zext | inv | inv | inv |
+| `u16` | inv | – | zext | zext | zext | inv | – | zext | zext | inv | – | zext | zext | inv | inv | inv |
+| `u32` | inv | inv | – | zext | zext | inv | inv | – | zext | inv | inv | – | zext | inv | inv | inv |
+| `u64` | inv | inv | inv | – | zext | inv | inv | inv | – | inv | inv | inv | – | inv | inv | inv |
+| `f16` | inv | – | zext | zext | zext | inv | inv | inv | inv | inv | inv | inv | inv | – | inv | inv |
+| `f32` | inv | inv | – | zext | zext | inv | inv | inv | inv | inv | inv | inv | inv | inv | – | inv |
+| `f64` | inv | inv | inv | – | zext | inv | inv | inv | inv | inv | inv | inv | inv | inv | inv | – |
 
 **Notes**
 
-- sext = sign-extend; zext = zero-extend; "–" = allowed, but no conversion needed; inv = invalid, parse error.
+sext = sign-extend; zext = zero-extend; "–" = allowed, but no conversion needed; inv = invalid, parse error.
+
 - Destination register size must be of equal or greater size than the instruction-type size.
 - Bit-size destination registers may be used with any appropriately-sized instruction type. The data are sign-extended to the destination register width for signed integer instruction types, and are zero-extended to the destination register width otherwise.
 - Integer destination registers may be used with any appropriately-sized bit-size or integer instruction type. The data are sign-extended to the destination register width for signed integer instruction types, and are zero-extended to the destination register width for bit-size and unsigned integer instruction types.
@@ -266,8 +268,32 @@ A PTX program may execute on a GPU with either a 16-bit or a 32-bit data path. W
 
 At the PTX language level, one solution would be to define semantics for 16-bit code that is consistent with execution on a 16-bit data path. This approach introduces a performance penalty for 16-bit code executing on a 32-bit data path, since the translated code would require many additional masking instructions to suppress extra precision bits in the high-order half-word of 32-bit registers.
 
-Rather than introduce a performance penalty for 16-bit code running on 32-bit GPUs, the semantics of 16-bit instructions in PTX is machine-specific. A compiler or programmer may chose to enforce portable, machine-independent 16-bit semantics by adding explicit conversions to 16-bit values at appropriate points in the program to guarantee portability of the code. However, for many performance-critical applications, this is not desirable, and for many applications the difference in execution is preferable to limiting performance.
+Rather than introduce a performance penalty for 16-bit code running on 32-bit GPUs, the semantics of 16-bit instructions in PTX is machine-specific. A compiler or programmer may choose to enforce portable, machine-independent 16-bit semantics by adding explicit conversions to 16-bit values at appropriate points in the program to guarantee portability of the code. However, for many performance-critical applications, this is not desirable, and for many applications the difference in execution is preferable to limiting performance.
 
 ## 9.7. Instructions
 
 All PTX instructions may be predicated. In the following descriptions, the optional guard predicate is omitted from the syntax.
+
+## Pages
+
+- [9.7.1. Integer Arithmetic Instructions](01-integer-arithmetic/README.md) — integer add, multiply, divide, min/max, bit-manipulation and dot-product instructions.
+- [9.7.2. Extended-Precision Integer Arithmetic Instructions](02-extended-precision/README.md) — carry-in/carry-out add, subtract and multiply-add for multi-word integers.
+- [9.7.3. Floating-Point Instructions](03-floating-point/README.md) — `.f32` and `.f64` arithmetic, transcendental and test instructions, with rounding and flush modifiers.
+- [9.7.4. Half Precision Floating-Point Instructions](04-half-precision-fp/README.md) — `.f16`, `.f16x2`, `.bf16` and `.bf16x2` arithmetic instructions.
+- [9.7.5. Mixed Precision Floating-Point Instructions](05-mixed-precision-fp/README.md) — arithmetic whose operands and result use different floating-point types.
+- [9.7.6. Alternate Floating-Point Instructions](06-alternate-fp/README.md) — arithmetic on the alternate (narrow) floating-point formats.
+- [9.7.7. Comparison and Selection Instructions](07-comparison-selection/README.md) — `set`, `setp`, `selp` and `slct`.
+- [9.7.8. Half Precision Comparison Instructions](08-half-precision-comparison/README.md) — `set` and `setp` on half-precision types.
+- [9.7.9. Logic and Shift Instructions](09-logic-shift/README.md) — bitwise logic, `lop3`, funnel shift and shift instructions.
+- [9.7.10. Data Movement and Conversion Instructions](10-data-movement-conversion/README.md) — `mov`, `ld`, `st`, `cvt`, `prmt`, shuffles, cache hints, address-space queries and asynchronous copies.
+- [9.7.11. Fabric Instructions](11-fabric/README.md) — `fabric.*` instructions for fabric-attached memory operations.
+- [9.7.12. Texture Instructions](12-texture/README.md) — `tex`, `tld4`, `txq` and `istypep`, with texturing modes and mipmaps.
+- [9.7.13. Surface Instructions](13-surface/README.md) — `suld`, `sust`, `sured` and `suq`.
+- [9.7.14. Control Flow Instructions](14-control-flow/README.md) — `{}`, `@`, `bra`, `brx.idx`, `call`, `ret` and `exit`.
+- [9.7.15. Parallel Synchronization and Communication Instructions](15-parallel-sync-communication/README.md) — barriers, fences, atomics, reductions, warp votes, `mbarrier` and cluster launch control.
+- [9.7.16. Warp Level Matrix Multiply-Accumulate Instructions](16-warp-level-mma/README.md) — `wmma`, `mma`, `ldmatrix`, `stmatrix`, `movmatrix` and sparse `mma.sp`.
+- [9.7.17. Asynchronous Warpgroup Level Matrix Multiply-Accumulate Instructions](17-wgmma/README.md) — `wgmma.mma_async`, its sparse variant, fences and commit/wait groups.
+- [9.7.18. TensorCore 5th Generation Family Instructions](18-tcgen05/README.md) — `tcgen05` tensor memory, descriptors, data movement, MMA, fence and commit instructions.
+- [9.7.19. Stack Manipulation Instructions](19-stack-manipulation/README.md) — `stacksave`, `stackrestore` and `alloca`.
+- [9.7.20. Video Instructions](20-video/README.md) — scalar and SIMD video instructions.
+- [9.7.21. Miscellaneous Instructions](21-miscellaneous/README.md) — `brkpt`, `nanosleep`, `pmevent`, `trap` and `setmaxnreg`.

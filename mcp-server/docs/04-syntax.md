@@ -1,6 +1,6 @@
 # 4. Syntax
 
-PTX programs are a collection of text source modules (files). PTX source modules have an assembly-language style syntax with instruction operation codes and operands. Pseudo-operations specify symbol and addressing management. The ptxas optimizing backend compiler optimizes and assembles PTX source modules to produce corresponding binary object files.
+PTX programs are a collection of text source modules (files). PTX source modules have an assembly-language style syntax with instruction operation codes and operands. Pseudo-operations specify symbol and addressing management. The `ptxas` optimizing backend compiler optimizes and assembles PTX source modules to produce corresponding binary object files.
 
 ## 4.1. Source Format
 
@@ -8,17 +8,17 @@ Source modules are ASCII text. Lines are separated by the newline character (`\n
 
 All whitespace characters are equivalent; whitespace is ignored except for its use in separating tokens in the language.
 
-The C preprocessor cpp may be used to process PTX source modules. Lines beginning with `#` are preprocessor directives. The following are common preprocessor directives:
+The C preprocessor `cpp` may be used to process PTX source modules. Lines beginning with `#` are preprocessor directives. The following are common preprocessor directives:
 
 ```
 #include, #define, #if, #ifdef, #else, #endif, #line, #file
 ```
 
-*C: A Reference Manual* by Harbison and Steele provides a good description of the C preprocessor.
+C: A Reference Manual by Harbison and Steele provides a good description of the C preprocessor.
 
 PTX is case sensitive and uses lowercase for keywords.
 
-Each PTX module must begin with a `.version` directive specifying the PTX language version, followed by a `.target` directive specifying the target architecture assumed. See PTX Module Directives for a more information on these directives.
+Each PTX module must begin with a `.version` directive specifying the PTX language version, followed by a `.target` directive specifying the target architecture assumed. See [PTX Module Directives](11-directives/01-module/README.md) for a more information on these directives.
 
 ## 4.2. Comments
 
@@ -44,9 +44,9 @@ start:  mov.b32   r1, %tid.x;
 
 ### 4.3.1. Directive Statements
 
-Directive keywords begin with a dot, so no conflict is possible with user-defined identifiers. The directives in PTX are listed in Table 1 and described in State Spaces, Types, and Variables and Directives.
+Directive keywords begin with a dot, so no conflict is possible with user-defined identifiers. The directives in PTX are listed in Table 1 and described in [State Spaces, Types, and Variables](05-state-spaces-types-variables/01-state-spaces.md) and [Directives](11-directives/README.md).
 
-**Table 1 PTX Directives**
+**Table 1** PTX Directives
 
 | | | | |
 |---|---|---|---|
@@ -62,43 +62,44 @@ Directive keywords begin with a dot, so no conflict is possible with user-define
 
 ### 4.3.2. Instruction Statements
 
-Instructions are formed from an instruction opcode followed by a comma-separated list of zero or more operands, and terminated with a semicolon. Operands may be register variables, constant expressions, address expressions, or label names. Instructions have an optional guard predicate which controls conditional execution. The guard predicate follows the optional label and precedes the opcode, and is written as `@p`, where p is a predicate register. The guard predicate may be optionally negated, written as `@!p`.
+Instructions are formed from an instruction opcode followed by a comma-separated list of zero or more operands, and terminated with a semicolon. Operands may be register variables, constant expressions, address expressions, or label names. Instructions have an optional guard predicate which controls conditional execution. The guard predicate follows the optional label and precedes the opcode, and is written as `@p`, where `p` is a predicate register. The guard predicate may be optionally negated, written as `@!p`.
 
 The destination operand is first, followed by source operands.
 
 Instruction keywords are listed in Table 2. All instruction keywords are reserved tokens in PTX.
 
-**Table 2 Reserved Instruction Keywords**
+**Table 2** Reserved Instruction Keywords
 
 | | | | | |
 |---|---|---|---|---|
-| `abs` | `cvta` | `membar` | `setp` | `vabsdiff` |
-| `activemask` | `discard` | `min` | `shf` | `vabsdiff2` |
-| `add` | `div` | `mma` | `shfl` | `vabsdiff4` |
-| `addc` | `dp2a` | `mov` | `shl` | `vadd` |
-| `alloca` | `dp4a` | `movmatrix` | `shr` | `vadd2` |
-| `and` | `elect` | `mul` | `sin` | `vadd4` |
-| `applypriority` | `ex2` | `mul24` | `slct` | `vavrg2` |
-| `atom` | `exit` | `multimem` | `sqrt` | `vavrg4` |
-| `bar` | `fence` | `nanosleep` | `st` | `vmad` |
-| `barrier` | `fma` | `neg` | `stackrestore` | `vmax` |
-| `bfe` | `fns` | `not` | `stacksave` | `vmax2` |
-| `bfi` | `getctarank` | `or` | `stmatrix` | `vmax4` |
-| `bfind` | `griddepcontrol` | `pmevent` | `sub` | `vmin` |
-| `bmsk` | `isspacep` | `popc` | `subc` | `vmin2` |
-| `bra` | `istypep` | `prefetch` | `suld` | `vmin4` |
-| `brev` | `ld` | `prefetchu` | `suq` | `vote` |
-| `brkpt` | `ldmatrix` | `prmt` | `sured` | `vset` |
-| `brx` | `ldu` | `rcp` | `sust` | `vset2` |
-| `call` | `lg2` | `red` | `szext` | `vset4` |
-| `clz` | `lop3` | `redux` | `tanh` | `vshl` |
-| `cnot` | `mad` | `rem` | `tcgen05` | `vshr` |
-| `copysign` | `mad24` | `ret` | `tensormap` | `vsub` |
-| `cos` | `madc` | `rsqrt` | `testp` | `vsub2` |
-| `clusterlaunchcontrol` | `mapa` | `sad` | `tex` | `vsub4` |
-| `cp` | `match` | `selp` | `tld4` | `wgmma` |
-| `createpolicy` | `max` | `set` | `trap` | `wmma` |
-| `cvt` | `mbarrier` | `setmaxnreg` | `txq` | `xor` |
+| `abs` | `cvta` | `min` | `shf` | `vabsdiff` |
+| `activemask` | `discard` | `mma` | `shfl` | `vabsdiff2` |
+| `add` | `div` | `mov` | `shl` | `vabsdiff4` |
+| `addc` | `dp2a` | `movmatrix` | `shr` | `vadd` |
+| `alloca` | `dp4a` | `mul` | `sin` | `vadd2` |
+| `and` | `elect` | `mul24` | `slct` | `vadd4` |
+| `applypriority` | `ex2` | `multimem` | `spcompress` | `vavrg2` |
+| `atom` | `exit` | `nanosleep` | `spdecompress` | `vavrg4` |
+| `bar` | `fence` | `neg` | `sqrt` | `vmad` |
+| `barrier` | `fma` | `not` | `st` | `vmax` |
+| `bfe` | `fns` | `or` | `stackrestore` | `vmax2` |
+| `bfi` | `getctarank` | `pmevent` | `stacksave` | `vmax4` |
+| `bfind` | `griddepcontrol` | `popc` | `stmatrix` | `vmin` |
+| `bmsk` | `isspacep` | `prefetch` | `sub` | `vmin2` |
+| `bra` | `istypep` | `prefetchu` | `subc` | `vmin4` |
+| `brev` | `ld` | `prmt` | `suld` | `vote` |
+| `brkpt` | `ldmatrix` | `rcp` | `suq` | `vset` |
+| `brx` | `ldu` | `red` | `sured` | `vset2` |
+| `call` | `lg2` | `redux` | `sust` | `vset4` |
+| `clmad` | `lop3` | `rem` | `szext` | `vshl` |
+| `clz` | `mad` | `ret` | `tanh` | `vshr` |
+| `cnot` | `mad24` | `rsqrt` | `tcgen05` | `vsub` |
+| `copysign` | `madc` | `sad` | `tensormap` | `vsub2` |
+| `cos` | `mapa` | `selp` | `testp` | `vsub4` |
+| `clusterlaunchcontrol` | `match` | `set` | `tex` | `wgmma` |
+| `cp` | `max` | `selp` | `tld4` | `wmma` |
+| `createpolicy` | `mbarrier` | `setmaxnreg` | `trap` | `xor` |
+| `cvt` | `membar` | `setp` | `txq` | |
 
 ## 4.4. Identifiers
 
@@ -115,7 +116,7 @@ Many high-level languages such as C and C++ follow similar rules for identifier 
 
 PTX predefines one constant and a small number of special registers that begin with the percentage sign, listed in Table 3.
 
-**Table 3 Predefined Identifiers**
+**Table 3** Predefined Identifiers
 
 | | | | |
 |---|---|---|---|
@@ -138,7 +139,7 @@ PTX supports integer and floating-point constants and constant expressions. Thes
 
 Integer constants are 64-bits in size and are either signed or unsigned, i.e., every integer constant has type `.s64` or `.u64`. The signed/unsigned nature of an integer constant is needed to correctly evaluate constant expressions containing operations such as division and ordered comparisons, where the behavior of the operation depends on the operand types. When used in an instruction or data initialization, each integer constant is converted to the appropriate size based on the data or instruction type at its use.
 
-Integer literals may be written in decimal, hexadecimal, octal, or binary notation. The syntax follows that of C. Integer literals may be followed immediately by the letter U to indicate that the literal is unsigned.
+Integer literals may be written in decimal, hexadecimal, octal, or binary notation. The syntax follows that of C. Integer literals may be followed immediately by the letter `U` to indicate that the literal is unsigned.
 
 ```
 hexadecimal literal:  0[xX]{hexdigit}+U?
@@ -149,7 +150,7 @@ decimal literal       {nonzero-digit}{digit}*U?
 
 Integer literals are non-negative and have a type determined by their magnitude and optional type suffix as follows: literals are signed (`.s64`) unless the value cannot be fully represented in `.s64` or the unsigned suffix is specified, in which case the literal is unsigned (`.u64`).
 
-The predefined integer constant WARP_SZ specifies the number of threads per warp for the target platform; to date, all target architectures have a WARP_SZ value of 32.
+The predefined integer constant `WARP_SZ` specifies the number of threads per warp for the target platform; to date, all target architectures have a `WARP_SZ` value of 32.
 
 ### 4.5.2. Floating-Point Constants
 
@@ -184,85 +185,71 @@ Constant expressions in PTX do not support casts between integer and floating-po
 
 Constant expressions are evaluated using the same operator precedence as in C. Table 4 gives operator precedence and associativity. Operator precedence is highest for unary operators and decreases with each line in the chart. Operators on the same line have the same precedence and are evaluated right-to-left for unary operators and left-to-right for binary operators.
 
-**Table 4 Operator Precedence**
+**Table 4** Operator Precedence
 
 | Kind | Operator Symbols | Operator Names | Associates |
-|------|-----------------|----------------|------------|
+|---|---|---|---|
 | Primary | `()` | parenthesis | n/a |
-| Unary | `+ - ! ~` | plus, minus, negation, complement | right |
-| | `(.s64)(.u64)` | casts | right |
-| Binary | `* / %` | multiplication, division, remainder | left |
-| | `+ -` | addition, subtraction | left |
-| | `>> <<` | shifts | left |
-| | `< > <= >=` | ordered comparisons | left |
-| | `== !=` | equal, not equal | left |
-| | `&` | bitwise AND | left |
-| | `^` | bitwise XOR | left |
-| | `\|` | bitwise OR | left |
-| | `&&` | logical AND | left |
-| | `\|\|` | logical OR | left |
+| Unary | `+- ! ~` | plus, minus, negation, complement | right |
+| Unary | `(.s64)(.u64)` | casts | right |
+| Binary | `*/ %` | multiplication, division, remainder | left |
+| Binary | `+-` | addition, subtraction | left |
+| Binary | `>> <<` | shifts | left |
+| Binary | `< > <= >=` | ordered comparisons | left |
+| Binary | `== !=` | equal, not equal | left |
+| Binary | `&` | bitwise AND | left |
+| Binary | `^` | bitwise XOR | left |
+| Binary | `\|` | bitwise OR | left |
+| Binary | `&&` | logical AND | left |
+| Binary | `\|\|` | logical OR | left |
 | Ternary | `?:` | conditional | right |
 
 ### 4.5.5. Integer Constant Expression Evaluation
 
 Integer constant expressions are evaluated at compile time according to a set of rules that determine the type (signed `.s64` versus unsigned `.u64`) of each sub-expression. These rules are based on the rules in C, but they've been simplified to apply only to 64-bit integers, and behavior is fully defined in all cases (specifically, for remainder and shift operators).
 
-Literals are signed unless unsigned is needed to prevent overflow, or unless the literal uses a U suffix. For example:
-
-- `42`, `0x1234`, `0123` are signed.
-- `0xfabc123400000000`, `42U`, `0x1234U` are unsigned.
-
-Unary plus and minus preserve the type of the input operand. For example:
-
-- `+123`, `-1`, `-(-42)` are signed.
-- `-1U`, `-0xfabc123400000000` are unsigned.
-
-Unary logical negation (`!`) produces a signed result with value 0 or 1.
-
-Unary bitwise complement (`~`) interprets the source operand as unsigned and produces an unsigned result.
-
-Some binary operators require normalization of source operands. This normalization is known as the usual arithmetic conversions and simply converts both operands to unsigned type if either operand is unsigned.
-
-Addition, subtraction, multiplication, and division perform the usual arithmetic conversions and produce a result with the same type as the converted operands. That is, the operands and result are unsigned if either source operand is unsigned, and is otherwise signed.
-
-Remainder (`%`) interprets the operands as unsigned. Note that this differs from C, which allows a negative divisor but defines the behavior to be implementation dependent.
-
-Left and right shift interpret the second operand as unsigned and produce a result with the same type as the first operand. Note that the behavior of right-shift is determined by the type of the first operand: right shift of a signed value is arithmetic and preserves the sign, and right shift of an unsigned value is logical and shifts in a zero bit.
-
-AND (`&`), OR (`|`), and XOR (`^`) perform the usual arithmetic conversions and produce a result with the same type as the converted operands.
-
-AND_OP (`&&`), OR_OP (`||`), Equal (`==`), and Not_Equal (`!=`) produce a signed result. The result value is 0 or 1.
-
-Ordered comparisons (`<`, `<=`, `>`, `>=`) perform the usual arithmetic conversions on source operands and produce a signed result. The result value is 0 or 1.
-
-Casting of expressions to signed or unsigned is supported using `(.s64)` and `(.u64)` casts.
-
-For the conditional operator ( `?:` ), the first operand must be an integer, and the second and third operands are either both integers or both floating-point. The usual arithmetic conversions are performed on the second and third operands, and the result type is the same as the converted type.
+- Literals are signed unless unsigned is needed to prevent overflow, or unless the literal uses a `U` suffix. For example:
+  - `42`, `0x1234`, `0123` are signed.
+  - `0xfabc123400000000`, `42U`, `0x1234U` are unsigned.
+- Unary plus and minus preserve the type of the input operand. For example:
+  - `+123`, `-1`, `-(-42)` are signed.
+  - `-1U`, `-0xfabc123400000000` are unsigned.
+- Unary logical negation (`!`) produces a signed result with value 0 or 1.
+- Unary bitwise complement (`~`) interprets the source operand as unsigned and produces an unsigned result.
+- Some binary operators require normalization of source operands. This normalization is known as the usual arithmetic conversions and simply converts both operands to unsigned type if either operand is unsigned.
+- Addition, subtraction, multiplication, and division perform the usual arithmetic conversions and produce a result with the same type as the converted operands. That is, the operands and result are unsigned if either source operand is unsigned, and is otherwise signed.
+- Remainder (`%`) interprets the operands as unsigned. Note that this differs from C, which allows a negative divisor but defines the behavior to be implementation dependent.
+- Left and right shift interpret the second operand as unsigned and produce a result with the same type as the first operand. Note that the behavior of right-shift is determined by the type of the first operand: right shift of a signed value is arithmetic and preserves the sign, and right shift of an unsigned value is logical and shifts in a zero bit.
+- AND (`&`), OR (`|`), and XOR (`^`) perform the usual arithmetic conversions and produce a result with the same type as the converted operands.
+- AND_OP (`&&`), OR_OP (`||`), Equal (`==`), and Not_Equal (`!=`) produce a signed result. The result value is 0 or 1.
+- Ordered comparisons (`<`, `<=`, `>`, `>=`) perform the usual arithmetic conversions on source operands and produce a signed result. The result value is 0 or 1.
+- Casting of expressions to signed or unsigned is supported using `(.s64)` and `(.u64)` casts.
+- For the conditional operator ( `? :` ) , the first operand must be an integer, and the second and third operands are either both integers or both floating-point. The usual arithmetic conversions are performed on the second and third operands, and the result type is the same as the converted type.
 
 ### 4.5.6. Summary of Constant Expression Evaluation Rules
 
 Table 5 contains a summary of the constant expression evaluation rules.
 
-**Table 5 Constant Expression Evaluation Rules**
+**Table 5** Constant Expression Evaluation Rules
 
 | Kind | Operator | Operand Types | Operand Interpretation | Result Type |
-|------|----------|---------------|----------------------|-------------|
+|---|---|---|---|---|
 | Primary | `()` | any type | same as source | same as source |
-| | constant literal | n/a | n/a | `.u64`, `.s64`, or `.f64` |
-| Unary | `+ -` | any type | same as source | same as source |
-| | `!` | integer | zero or non-zero | `.s64` |
-| | `~` | integer | `.u64` | `.u64` |
+| Primary | constant literal | n/a | n/a | `.u64`, `.s64`, or `.f64` |
+| Unary | `+-` | any type | same as source | same as source |
+| Unary | `!` | integer | zero or non-zero | `.s64` |
+| Unary | `~` | integer | `.u64` | `.u64` |
 | Cast | `(.u64)` | integer | `.u64` | `.u64` |
-| | `(.s64)` | integer | `.s64` | `.s64` |
-| Binary | `+ - * /` | `.f64` | `.f64` | `.f64` |
-| | | integer | use usual conversions | converted type |
-| | `< > <= >=` | `.f64` | `.f64` | `.s64` |
-| | | integer | use usual conversions | `.s64` |
-| | `== !=` | `.f64` | `.f64` | `.s64` |
-| | | integer | use usual conversions | `.s64` |
-| | `%` | integer | `.u64` | `.s64` |
-| | `>> <<` | integer | 1st unchanged, 2nd is `.u64` | same as 1st operand |
-| | `& \| ^` | integer | `.u64` | `.u64` |
-| | `&& \|\|` | integer | zero or non-zero | `.s64` |
+| Cast | `(.s64)` | integer | `.s64` | `.s64` |
+| Binary | `+- * /` | `.f64` | `.f64` | `.f64` |
+| Binary | `+- * /` | integer | use usual conversions | converted type |
+| Binary | `< > <= >=` | `.f64` | `.f64` | `.s64` |
+| Binary | `< > <= >=` | integer | use usual conversions | `.s64` |
+| Binary | `== !=` | `.f64` | `.f64` | `.s64` |
+| Binary | `== !=` | integer | use usual conversions | `.s64` |
+| Binary | `%` | integer | `.u64` | `.s64` |
+| Binary | `>> <<` | integer | 1st unchanged, 2nd is `.u64` | same as 1st operand |
+| Binary | `& \| ^` | integer | `.u64` | `.u64` |
+| Binary | `&& \|\|` | integer | zero or non-zero | `.s64` |
 | Ternary | `?:` | int ? `.f64` : `.f64` | same as sources | `.f64` |
-| | | int ? int : int | use usual conversions | converted type |
+| Ternary | `?:` | int ? int : int | use usual conversions | converted type |

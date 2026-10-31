@@ -1,14 +1,14 @@
-## 8.10. Axioms
+# 8.10. Axioms
 
-### 8.10.1. Coherence
+## 8.10.1. Coherence
 
 If a write W precedes an overlapping write W' in causality order, then W must precede W' in coherence order.
 
-### 8.10.2. Fence-SC
+## 8.10.2. Fence-SC
 
 Fence-SC order cannot contradict causality order. For a pair of morally strong `fence.sc` operations F1 and F2, if F1 precedes F2 in causality order, then F1 must precede F2 in Fence-SC order.
 
-### 8.10.3. Atomicity
+## 8.10.3. Atomicity
 
 **Single-Copy Atomicity**
 
@@ -54,7 +54,7 @@ Atomicity is guaranteed when the operations are morally strong.
 
 Atomicity is not guaranteed if the operations are not morally strong.
 
-### 8.10.4. No Thin Air
+## 8.10.4. No Thin Air
 
 Values may not appear "out of thin air": an execution cannot speculatively produce a value in such a way that the speculation becomes self-satisfying through chains of instruction dependencies and inter-thread communication. This matches both programmer intuition and hardware reality, but is necessary to state explicitly when performing formal analysis.
 
@@ -94,7 +94,7 @@ Here the lack of dependencies is plain, but the implementation may perform any c
 
 This form of load buffering is deliberately permitted in the PTX memory consistency model.
 
-### 8.10.5. Sequential Consistency Per Location
+## 8.10.5. Sequential Consistency Per Location
 
 Within any set of overlapping memory operations that are pairwise morally strong, communication order cannot contradict program order, i.e., a concatenation of program order between overlapping operations and morally strong relations in communication order cannot result in a cycle. This ensures that each program slice of overlapping pairwise morally strong operations is strictly sequentially-consistent.
 
@@ -113,7 +113,7 @@ Within any set of overlapping memory operations that are pairwise morally strong
 
 The litmus test "CoRR" (Coherent Read-Read), demonstrates one consequence of this guarantee. A thread T1 executes a write W1 on a location x, and a thread T2 executes two (or an infinite sequence of) reads R1 and R2 on the same location x. No other writes are executed on x, except the one modelling the initial value. The operations W1, R1 and R2 are pairwise morally strong. If R1 reads from W1, then the subsequent read R2 must also observe the same value. If R2 observed the initial value of x instead, then this would form a sequence of morally-strong relations R2->W1->R1 in communication order that contradicts the program order R1->R2 in thread T2. Hence R2 cannot read the initial value of x in such an execution.
 
-### 8.10.6. Causality
+## 8.10.6. Causality
 
 Relations in communication order cannot contradict causality order. This constrains the set of candidate write operations that a read operation may read from:
 
@@ -150,11 +150,11 @@ If R1 observes W2, then the release pattern "F1; W2" synchronizes with the acqui
 .global .u32 data_alias_2;
 ```
 
-| T1 | |
-|---|---|
-| `W1: st.global.u32 [data_alias_1], 1;` | |
-| `F1: fence.proxy.alias;` | |
-| `R1: ld.global.u32 %r1, [data_alias_2];` | |
+| T1 |
+|---|
+| `W1: st.global.u32 [data_alias_1], 1;` |
+| `F1: fence.proxy.alias;` |
+| `R1: ld.global.u32 %r1, [data_alias_2];` |
 
 `%r1 == 1`
 
@@ -179,9 +179,9 @@ The litmus test known as "SB" (Store Buffering) demonstrates the sequential cons
 
 In any execution, either F1 precedes F2 in Fence-SC order, or vice versa. If F1 precedes F2 in Fence-SC order, then F1 synchronizes with F2. This establishes the causality order in W1 -> F1 -> F2 -> R2. Axiom causality ensures that R2 cannot read from any write that precedes W1 in coherence order. In the absence of any other write to that variable, R2 must read from W1. Similarly, in the case where F2 precedes F1 in Fence-SC order, R1 must read from W2. If each `fence.sc` in this example were replaced by a `fence.acq_rel` instruction, then this outcome is not guaranteed. There may be an execution where the write from each thread remains unobserved from the other thread, i.e., an execution is possible, where both R1 and R2 return the initial value "0" for variables y and x respectively.
 
-## 8.11. Special Cases
+# 8.11. Special Cases
 
-### 8.11.1. Reductions do not form Acquire Patterns
+## 8.11.1. Reductions do not form Acquire Patterns
 
 Atomic reduction operations like `red` do not form acquire patterns with acquire fences.
 

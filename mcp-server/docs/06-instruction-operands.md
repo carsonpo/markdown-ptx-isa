@@ -8,17 +8,17 @@ The bit-size type is compatible with every type having the same size. Integer ty
 
 ## 6.2. Source Operands
 
-The source operands are denoted in the instruction descriptions by the names a, b, and c. PTX describes a load-store machine, so operands for ALU instructions must all be in variables declared in the `.reg` register state space. For most operations, the sizes of the operands must be consistent.
+The source operands are denoted in the instruction descriptions by the names `a`, `b`, and `c`. PTX describes a load-store machine, so operands for ALU instructions must all be in variables declared in the `.reg` register state space. For most operations, the sizes of the operands must be consistent.
 
 The `cvt` (convert) instruction takes a variety of operand types and sizes, as its job is to convert from nearly any data type to any other data type (and size).
 
 The `ld`, `st`, `mov`, and `cvt` instructions copy data from one location to another. Instructions `ld` and `st` move data from/to addressable state spaces to/from registers. The `mov` instruction copies data between registers.
 
-Most instructions have an optional predicate guard that controls conditional execution, and a few instructions have additional predicate source operands. Predicate operands are denoted by the names p, q, r, s.
+Most instructions have an optional predicate guard that controls conditional execution, and a few instructions have additional predicate source operands. Predicate operands are denoted by the names `p`, `q`, `r`, `s`.
 
 ## 6.3. Destination Operands
 
-PTX instructions that produce a single result store the result in the field denoted by d (for destination) in the instruction descriptions. The result operand is a scalar or vector variable in the register state space.
+PTX instructions that produce a single result store the result in the field denoted by `d` (for destination) in the instruction descriptions. The result operand is a scalar or vector variable in the register state space.
 
 ## 6.4. Using Addresses, Arrays, and Vectors
 
@@ -33,7 +33,7 @@ All the memory instructions take an address operand that specifies the memory lo
 - `[reg+immOff]` — a sum of register `reg` containing a byte address plus a constant integer byte offset (signed, 32-bit).
 - `[var+immOff]` — a sum of address of addressable variable `var` containing a byte address plus a constant integer byte offset (signed, 32-bit).
 - `[immAddr]` — an immediate absolute byte address (unsigned, 32-bit).
-- `var[immOff]` — an array element as described in Arrays as Operands.
+- `var[immOff]` — an array element as described in [Arrays as Operands](#642-arrays-as-operands).
 
 The register containing an address may be declared as a bit-size type or integer type.
 
@@ -45,7 +45,7 @@ The address size may be either 32-bit or 64-bit. 128-bit addresses are not suppo
 
 Address arithmetic is performed using integer arithmetic and logical instructions. Examples include pointer arithmetic and pointer comparisons. All addresses and address computations are byte-based; there is no support for C-style pointer arithmetic.
 
-The `mov` instruction can be used to move the address of a variable into a pointer. The address is an offset in the state space in which the variable is declared. Load and store operations move data between registers and locations in addressable state spaces. The syntax is similar to that used in many assembly languages, where scalar variables are simply named and addresses are de-referenced by enclosing the address expression in square brackets. Address expressions include variable names, address registers, address register plus byte offset, and immediate address expressions which evaluate at compile-time to a constant address.
+The `mov` instruction can be used to move the address of a variable into a pointer. The address is an offset in the state space in which the variable is declared. The state space specified by memory instructions must match the state space of the address operand, otherwise the behavior is undefined. Load and store operations move data between registers and locations in addressable state spaces. The syntax is similar to that used in many assembly languages, where scalar variables are simply named and addresses are de-referenced by enclosing the address expression in square brackets. Address expressions include variable names, address registers, address register plus byte offset, and immediate address expressions which evaluate at compile-time to a constant address.
 
 Here are a few examples:
 
@@ -104,7 +104,7 @@ ld.global.v2.u32  V2, [addr+8];
 
 Elements in a brace-enclosed vector, say `{Ra, Rb, Rc, Rd}`, correspond to extracted elements as follows:
 
-```
+```ptx
 Ra = V.x = V.r
 Rb = V.y = V.g
 Rc = V.z = V.b
@@ -123,14 +123,16 @@ All operands to all arithmetic, logic, and data movement instruction must be of 
 
 ### 6.5.1. Scalar Conversions
 
-Table 15 and Table 16 show what precision and format the `cvt` instruction uses given operands of differing types. For example, if a `cvt.s32.u16` instruction is given a u16 source operand and s32 as a destination operand, the u16 is zero-extended to s32.
+Table 15 and Table 16 show what precision and format the `cvt` instruction uses given operands of differing types. For example, if a `cvt.s32.u16` instruction is given a `u16` source operand and `s32` as a destination operand, the `u16` is zero-extended to `s32`.
 
-Conversions to floating-point that are beyond the range of floating-point numbers are represented with the maximum floating-point value (IEEE 754 Inf for f32 and f64, and ~131,000 for f16).
+Conversions to floating-point that are beyond the range of floating-point numbers are represented with the maximum floating-point value (IEEE 754 Inf for `f32` and `f64`, and ~131,000 for `f16`).
 
-**Table 15 Convert Instruction Precision and Format Table 1**
+**Table 15** Convert Instruction Precision and Format Table 1
+
+Columns are the Destination Format; rows are the Source Format.
 
 | Source Format | s8 | s16 | s32 | s64 | u8 | u16 | u32 | u64 | f16 | f32 | f64 | bf16 | tf32 |
-|---------------|-----|------|------|------|-----|------|------|------|-----|-----|-----|------|------|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | **s8** | – | sext | sext | sext | – | sext | sext | sext | s2f | s2f | s2f | s2f | – |
 | **s16** | chop¹ | – | sext | sext | chop¹ | – | sext | sext | s2f | s2f | s2f | s2f | – |
 | **s32** | chop¹ | chop¹ | – | sext | chop¹ | chop¹ | – | sext | s2f | s2f | s2f | s2f | – |
@@ -145,20 +147,23 @@ Conversions to floating-point that are beyond the range of floating-point number
 | **bf16** | f2s | f2s | f2s | f2s | f2u | f2u | f2u | f2u | f2f | f2f | f2f | f2f | – |
 | **tf32** | – | – | – | – | – | – | – | – | – | – | – | – | – |
 
-**Table 16 Convert Instruction Precision and Format Table 2**
+**Table 16** Convert Instruction Precision and Format Table 2
 
-| Source Format | f16 | f32 | bf16 | e4m3 | e5m2 | e2m3 | e3m2 | e2m1 | ue8m0 | s2f6 |
-|---------------|-----|-----|------|------|------|------|------|------|-------|------|
-| **f16** | – | f2f | f2f | f2f | f2f | f2f | f2f | f2f | – | – |
-| **f32** | f2f | – | f2f | f2f | f2f | f2f | f2f | f2f | f2f | f2f |
-| **bf16** | f2f | f2f | – | f2f | f2f | f2f | f2f | f2f | f2f | f2f |
-| **e4m3** | f2f | – | f2f | – | – | – | – | – | – | – |
-| **e5m2** | f2f | – | f2f | – | – | – | – | – | – | – |
-| **e2m3** | f2f | – | f2f | – | – | – | – | – | – | – |
-| **e3m2** | f2f | – | f2f | – | – | – | – | – | – | – |
-| **e2m1** | f2f | – | f2f | – | – | – | – | – | – | – |
-| **ue8m0** | – | – | f2f | – | – | – | – | – | – | – |
-| **s2f6** | – | – | f2f | – | – | – | – | – | – | – |
+Columns are the Destination Format; rows are the Source Format.
+
+| Source Format | f16 | f32 | bf16 | e4m3 | e5m2 | e2m3 | e3m2 | e2m1 | ue8m0 | ue5m3 | s2f6 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **f16** | – | f2f | f2f | f2f | f2f | f2f | f2f | f2f | – | f2f | – |
+| **f32** | f2f | – | f2f | f2f | f2f | f2f | f2f | f2f | f2f | f2f | f2f |
+| **bf16** | f2f | f2f | – | f2f | f2f | f2f | f2f | f2f | f2f | f2f | f2f |
+| **e4m3** | f2f | – | f2f | – | – | – | – | – | – | – | – |
+| **e5m2** | f2f | – | f2f | – | – | – | – | – | – | – | – |
+| **e2m3** | f2f | – | f2f | – | – | – | – | – | – | – | – |
+| **e3m2** | f2f | – | f2f | – | – | – | – | – | – | – | – |
+| **e2m1** | f2f | – | f2f | – | – | – | – | – | – | – | – |
+| **ue8m0** | – | – | f2f | – | – | – | – | – | – | – | – |
+| **ue5m3** | – | – | f2f | – | – | – | – | – | – | – | – |
+| **s2f6** | – | – | f2f | – | – | – | – | – | – | – | – |
 
 **Notes**
 
@@ -168,16 +173,16 @@ s2f = signed-to-float; f2s = float-to-signed; u2f = unsigned-to-float;
 
 f2u = float-to-unsigned; f2f = float-to-float.
 
-1. If the destination register is wider than the destination format, the result is extended to the destination register width after chopping. The type of extension (sign or zero) is based on the destination format. For example, `cvt.s16.u32` targeting a 32-bit register first chops to 16-bit, then sign-extends to 32-bit.
+¹ If the destination register is wider than the destination format, the result is extended to the destination register width after chopping. The type of extension (sign or zero) is based on the destination format. For example, `cvt.s16.u32` targeting a 32-bit register first chops to 16-bit, then sign-extends to 32-bit.
 
 ### 6.5.2. Rounding Modifiers
 
 Conversion instructions may specify a rounding modifier. In PTX, there are four integer rounding modifiers and six floating-point rounding modifiers. Table 17 and Table 18 summarize the rounding modifiers.
 
-**Table 17 Floating-Point Rounding Modifiers**
+**Table 17** Floating-Point Rounding Modifiers
 
 | Modifier | Description |
-|----------|-------------|
+|---|---|
 | `.rn` | rounds to nearest even |
 | `.rna` | rounds to nearest, ties away from zero |
 | `.rz` | rounds towards zero |
@@ -185,10 +190,10 @@ Conversion instructions may specify a rounding modifier. In PTX, there are four 
 | `.rp` | rounds towards positive infinity |
 | `.rs` | rounds either towards zero or away from zero based on the carry out of the integer addition of random bits and the discarded bits of mantissa |
 
-**Table 18 Integer Rounding Modifiers**
+**Table 18** Integer Rounding Modifiers
 
 | Modifier | Description |
-|----------|-------------|
+|---|---|
 | `.rni` | round to nearest integer, choosing even integer if source is equidistant between two integers. |
 | `.rzi` | round to nearest integer in the direction of zero |
 | `.rmi` | round to nearest integer in direction of negative infinity |
@@ -198,10 +203,10 @@ Conversion instructions may specify a rounding modifier. In PTX, there are four 
 
 Operands from different state spaces affect the speed of an operation. Registers are fastest, while global memory is slowest. Much of the delay to memory can be hidden in a number of ways. The first is to have multiple threads of execution so that the hardware can issue a memory operation and then switch to other execution. Another way to hide latency is to issue the load instructions as early as possible, as execution is not blocked until the desired result is used in a subsequent (in time) instruction. The register in a store operation is available much more quickly. Table 19 gives estimates of the costs of using different kinds of memory.
 
-**Table 19 Cost Estimates for Accessing State-Spaces**
+**Table 19** Cost Estimates for Accessing State-Spaces
 
 | Space | Time | Notes |
-|-------|------|-------|
+|---|---|---|
 | Register | 0 | |
 | Shared | 0 | |
 | Constant | 0 | Amortized cost is low, first access is high |
